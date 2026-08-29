@@ -5,7 +5,7 @@ namespace API.Controllers;
 
 [ApiController]
 [AllowAnonymous]
-[Route("api/route/health")]
+[Route("api/public/health")]
 public class HealthController(IConfiguration configuration, IHostEnvironment environment) : ControllerBase
 {
     [HttpGet]
