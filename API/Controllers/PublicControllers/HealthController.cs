@@ -1,14 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace API.Controllers;
+namespace API.Controllers.PublicControllers;
 
 [ApiController]
 [AllowAnonymous]
-[Route("api/public/health")]
-public class HealthController(IConfiguration configuration, IHostEnvironment environment) : ControllerBase
+public class HealthController(IConfiguration configuration, IHostEnvironment environment) : PublicController
 {
     [HttpGet]
+    [Route("health")]
     public IActionResult GetStatus()
     {
         var serviceName = configuration["Serilog:Properties:Application"] 
