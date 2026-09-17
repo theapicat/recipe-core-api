@@ -1,0 +1,7 @@
+namespace RecipeCoreApi.Domain.Models.Ingredients;
+
+public class IngredientCategory
+{
+    public required Guid Id { get; set; }
+    public required string Name { get; set; }
+}

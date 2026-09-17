@@ -14,21 +14,9 @@ public class SendContactFormCommandHandler(
     {
         logger.LogInformation("Behandler innkommende kontaktskjema for e-post: {Email}", request.Email);
 
-        var isValid = MockValidate(request);
-        if (!isValid)
-        {
-            logger.LogWarning("Validering feilet for kontaktskjema sendt av: {Email}", request.Email);
-            return false;
-        }
-        
         await UseMassTransit(request);
 
         return true;
-    }
-
-    private bool MockValidate(SendContactFormCommand request)
-    {
-        return !string.IsNullOrWhiteSpace(request.Email) && request.Email.Contains("@");
     }
 
     private async Task UseMassTransit(SendContactFormCommand request)
