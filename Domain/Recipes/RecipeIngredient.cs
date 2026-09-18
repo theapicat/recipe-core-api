@@ -1,4 +1,4 @@
-namespace RecipeCoreApi.Domain.Models.Recipes;
+namespace Domain.Recipes;
 
 // Peker på nøyaktig én av IngredientId eller UnconfirmedIngredientId, aldri begge/ingen.
 public class RecipeIngredient

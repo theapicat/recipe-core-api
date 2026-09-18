@@ -1,4 +1,4 @@
-namespace RecipeCoreApi.Domain.Models.Recipes;
+namespace Domain.Recipes;
 
 public class RecipeListItem
 {

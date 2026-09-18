@@ -1,4 +1,4 @@
-namespace RecipeCoreApi.Domain.Models.Ingredients;
+namespace Domain.Ingredients;
 
 public class IngredientCategory
 {

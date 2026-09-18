@@ -1,4 +1,4 @@
-namespace RecipeCoreApi.Domain.Models.Ingredients;
+namespace Domain.Ingredients;
 
 // Kun én rad per (IngredientId, NutrientDefinitionId) som faktisk er målt - ikke alle
 // ingredienser har verdi for alle næringsstoffer.

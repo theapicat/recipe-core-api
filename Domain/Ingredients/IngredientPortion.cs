@@ -1,4 +1,4 @@
-namespace RecipeCoreApi.Domain.Models.Ingredients;
+namespace Domain.Ingredients;
 
 // Enhet -> gram-konvertering per ingrediens (speiler Matvaretabellens "portions"-data),
 // i stedet for en generell tetthetsberegning.

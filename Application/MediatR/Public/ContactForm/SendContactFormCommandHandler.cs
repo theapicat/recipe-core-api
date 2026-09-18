@@ -1,4 +1,4 @@
-using Contracts.Events;
+using Contracts.Event;
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;

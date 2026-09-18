@@ -1,4 +1,4 @@
-namespace RecipeCoreApi.Domain.Models.Ingredients;
+namespace Domain.Ingredients;
 
 // En brukeroppgitt ingrediens som ikke finnes i den offisielle katalogen ennå.
 // Ikke del av Ingredient-katalogen - kun synlig/brukbar for brukeren som opprettet den, til admin

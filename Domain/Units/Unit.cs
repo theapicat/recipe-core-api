@@ -1,4 +1,4 @@
-namespace RecipeCoreApi.Domain.Models.Units;
+namespace Domain.Units;
 
 public class Unit
 {

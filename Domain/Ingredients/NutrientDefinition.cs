@@ -1,4 +1,4 @@
-namespace RecipeCoreApi.Domain.Models.Ingredients;
+namespace Domain.Ingredients;
 
 // Speiler Matvaretabellens næringsstoff-katalog. Id er kildens egen kode (f.eks. "Fett", "Vit C"),
 // ikke en generert Guid - katalogen importeres derfra, koden er allerede stabil og unik.
