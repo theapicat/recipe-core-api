@@ -17,4 +17,10 @@
       <ProjectReference Include="..\Domain\Domain.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Implementation\" />
+      <Folder Include="Intefaces\" />
+      <Folder Include="Scripts\" />
+    </ItemGroup>
+
 </Project>
