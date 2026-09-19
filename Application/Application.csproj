@@ -12,13 +12,12 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Contracts\Contracts.csproj" />
+      <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
       <ProjectReference Include="..\Persistence\Persistence.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <Reference Include="MassTransit.Abstractions">
-        <HintPath>..\..\..\..\.nuget\packages\masstransit.abstractions\8.3.0\lib\net8.0\MassTransit.Abstractions.dll</HintPath>
-      </Reference>
+      <Folder Include="Messaging\" />
     </ItemGroup>
 
 </Project>

@@ -1,11 +1,13 @@
 using MassTransit;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace API.Extensions;
+namespace Infrastructure.Extensions;
 
 public static class MassTransitExtensions
 {
     public static IServiceCollection AddMassTransitServices(
-        this IServiceCollection services, 
+        this IServiceCollection services,
         IConfiguration configuration)
     {
         services.AddMassTransit(x =>
