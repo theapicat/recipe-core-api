@@ -1,4 +1,4 @@
-namespace Infrastructure.Messaging.Interfaces;
+namespace Application.Messaging.Interfaces;
 
 /// <summary>
 /// Publiserer hendelser til meldingsbussen. Skjuler MassTransit/RabbitMQ-detaljer for handlers.

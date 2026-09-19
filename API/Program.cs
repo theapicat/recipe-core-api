@@ -1,13 +1,15 @@
 using API.Extensions;
-using Infrastructure.Extensions;
+using Application.Extensions;
+using Persistence.Extensions;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.AddSerilogLogging();
 
-builder.Services.AddApplicationServices();
-builder.Services.AddInfrastructureServices(builder.Configuration);
+builder.Configuration.MigrateDatabase();
+
+builder.Services.AddApplicationServices(builder.Configuration);
 
 builder.Services.AddControllers();
 

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 
-namespace Infrastructure.Realtime;
+namespace Application.Realtime;
 
 /// <summary>
 /// Plassholder for sanntidsoppdateringer til frontend via SignalR/WebSockets.

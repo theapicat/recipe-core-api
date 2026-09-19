@@ -1,7 +1,7 @@
-using Infrastructure.Messaging.Interfaces;
+using Application.Messaging.Interfaces;
 using MassTransit;
 
-namespace Infrastructure.Messaging.Implementation;
+namespace Application.Messaging.Implementation;
 
 public class 
     MassTransitEventPublisher(IPublishEndpoint publishEndpoint) : IEventPublisher

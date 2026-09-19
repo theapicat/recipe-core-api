@@ -2,7 +2,7 @@ using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Infrastructure.Extensions;
+namespace Application.Extensions;
 
 public static class MassTransitExtensions
 {

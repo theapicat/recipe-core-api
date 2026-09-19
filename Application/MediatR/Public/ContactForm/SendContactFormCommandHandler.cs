@@ -1,5 +1,5 @@
 using Contracts.Event;
-using Infrastructure.Messaging.Interfaces;
+using Application.Messaging.Interfaces;
 using MediatR;
 using Microsoft.Extensions.Logging;
 

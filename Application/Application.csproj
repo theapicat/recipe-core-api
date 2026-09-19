@@ -7,17 +7,18 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="MassTransit" Version="8.3.0" />
+      <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.0" />
       <PackageReference Include="MediatR" Version="14.2.0" />
     </ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\Contracts\Contracts.csproj" />
-      <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
       <ProjectReference Include="..\Persistence\Persistence.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <Folder Include="Messaging\" />
     </ItemGroup>
 
 </Project>

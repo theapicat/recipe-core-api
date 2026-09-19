@@ -1,9 +1,9 @@
-using Infrastructure.Realtime;
+using Application.Realtime;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Infrastructure.Extensions;
+namespace Application.Extensions;
 
 public static class RealtimeExtensions
 {

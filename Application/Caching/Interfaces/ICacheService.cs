@@ -1,4 +1,4 @@
-namespace Infrastructure.Caching.Interfaces;
+namespace Application.Caching.Interfaces;
 
 /// <summary>
 /// Cache for data som sjelden endres, f.eks. admin-kataloger (kategorier, allergener, enheter).
