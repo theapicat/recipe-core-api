@@ -56,13 +56,30 @@ Selve motoren og hjertet i Recipe-plattformen. Dette API-et håndterer all kjern
 
 ```text
 recipe-core-api/
-├── Recipe.Core.Contracts/     # Rene record-events for RabbitMQ (deles med andre mikrotjenester)
-├── Recipe.Core.Domain/        # Kjerne-entiteter (Recipe, Ingredient, MealPlan), Enums og Value Objects
-├── Recipe.Core.Application/   # MediatR Commands/Queries, Handlers, FluentValidation og interfaces
-├── Recipe.Core.Persistence/   # Dapper/Dapper.Plus repositorier, Npgsql-kobling og rå SQL-skript
-└── Recipe.Core.API/           # Controllers, SignalR Hubs, MassTransit Consumers og Serilog/DI-oppsett
+├── Contracts/      # Rene record-events for RabbitMQ (deles med andre mikrotjenester)
+├── Domain/         # Kjerne-entiteter (Recipe, Ingredient, ...), Enums og Value Objects
+├── Application/    # MediatR Commands/Queries, Handlers, caching, meldingspublisering, SignalR
+├── Persistence/    # Dapper-repositorier, Npgsql-kobling, DbUp-migreringsskript
+├── API/            # Controllers, DI/oppstartskobling, JWT-autentisering
+└── Tests/          # xUnit-enhetstester
 
 ```
+
+---
+
+## 📚 Dokumentasjonsoversikt (`Documentation/`)
+
+| Dokument | Beskrivelse |
+| --- | --- |
+| **[01-architecture-and-setup.md](Documentation/01-architecture-and-setup.md)** | Prosjektgraf, mappekonvensjoner, hvordan kjøre lokalt. |
+| **[02-endpoints-and-controllers.md](Documentation/02-endpoints-and-controllers.md)** | Full endepunktstabell, tilgangsnivåer, kontrollermønster. |
+| **[03-cqrs-and-mediatr.md](Documentation/03-cqrs-and-mediatr.md)** | MediatR-bruk, det generiske katalogmønsteret, DI-registreringsfallgruve. |
+| **[04-events-and-messaging.md](Documentation/04-events-and-messaging.md)** | MassTransit/RabbitMQ-oppsett, `IEventPublisher`, meldingskontrakter, SignalR-status. |
+| **[05-authentication-and-authorization.md](Documentation/05-authentication-and-authorization.md)** | JWT-validering, tilgangsnivåer, kjente hull og åpne spørsmål. |
+| **[06-persistence-and-data-access.md](Documentation/06-persistence-and-data-access.md)** | Dapper-mønster, SQL-skript-nummerering, tilkoblingsoppsett. |
+| **[07-test-strategy.md](Documentation/07-test-strategy.md)** | Testverktøy, hva som er dekket, hva som mangler. |
+
+Domenemodellens designbegrunnelse («hvorfor») ligger i `RECIPE_BACKEND_NOTES.md`, ikke i `Documentation/`.
 
 ---
 

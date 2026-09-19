@@ -7,8 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `recipe-core-api` is the core backend service of the Recipe platform: recipes, ingredients/nutrition,
 meal planning, and user data. It sits behind a YARP gateway and talks to sibling microservices
 (`recipe-scraper-service`, `recipe-notification-service`) over RabbitMQ, not direct HTTP calls. This repo
-is early-stage: the domain model exists, but persistence, most application handlers, and API endpoints
-are still to be built (see `RECIPE_BACKEND_NOTES.md` for the design rationale behind the domain model).
+is early-stage: the domain model, the six admin-managed catalog models (full CRUD, cached reads), and JWT
+auth are built end-to-end; recipes, meal planning, and shopping lists are not started (see
+`RECIPE_BACKEND_NOTES.md` for the domain model's design rationale, and `Documentation/` for everything
+else — start with `Documentation/01-architecture-and-setup.md`).
 
 ## Commands
 
@@ -16,10 +18,8 @@ are still to be built (see `RECIPE_BACKEND_NOTES.md` for the design rationale be
 dotnet build                          # build the whole solution
 dotnet run --project API              # run the API (http://localhost:5002, see API/Properties/launchSettings.json)
 dotnet watch --project API run        # run with hot reload
+dotnet test Tests/Tests.csproj        # run unit tests (34 tests, no external dependencies needed)
 ```
-
-There is currently no test project in the solution — do not assume `dotnet test` has anything to run
-until one is added.
 
 Local dependencies (Postgres, RabbitMQ, Seq) are expected to run externally (e.g. via the platform's
 docker-compose, in a sibling repo) — connection settings for them live in
@@ -41,33 +41,44 @@ API  →  Application  →  Persistence  →  Domain
 - **Contracts** — cross-service message records (e.g. `Contracts/Event/ContactFormSubmittedEvent.cs`)
   published to RabbitMQ. This is the only project meant to be shared/compared against other
   microservices' contracts.
-- **Persistence** — intended for Dapper/Dapper.Plus repositories and raw SQL against Postgres via
-  Npgsql, with `dbup-postgresql` for migrations. Currently just the empty project shell — no repositories,
-  connection factory, or migration scripts exist yet.
-- **Application** — MediatR commands/queries and their handlers (CQRS). `ApplicationMarker` is the
-  assembly-scanning anchor used by `services.AddMediatR(...)` in `API/Extensions/ApplicationExtensions.cs`.
-  Handlers depend on `Persistence` (not yet implemented) and `Contracts` (for publishing events).
-- **API** — ASP.NET Core controllers, DI/startup wiring (`API/Extensions/*.cs`), Serilog + MassTransit
-  config. Controllers only translate HTTP ↔ MediatR; no business logic in controllers.
+- **Persistence** — Dapper + Npgsql against Postgres, `dbup-postgresql` for migrations. Generic
+  `DbReader<T>`/`DbWriter<T>` base classes in `Persistence/Services/`, one concrete Reader/Writer pair
+  per model in `Persistence/Implementation/`. All queries/commands call Postgres functions, never raw SQL
+  built in C#. Details: `Documentation/06-persistence-and-data-access.md`.
+- **Application** — MediatR commands/queries and their handlers (CQRS), plus all cross-cutting technical
+  services (caching, event publishing, SignalR) — there is no separate `Infrastructure` project (merged
+  into `Application` 2026-09-19; default new cross-cutting concerns here too, only extract a project once
+  something is genuinely large). `ApplicationMarker` is the assembly-scanning anchor for
+  `services.AddMediatR(...)`. Details: `Documentation/03-cqrs-and-mediatr.md`,
+  `Documentation/04-events-and-messaging.md`.
+- **API** — ASP.NET Core controllers, DI/startup wiring (`API/Extensions/*.cs`), Serilog + JWT auth
+  config. Controllers only translate HTTP ↔ MediatR; no business logic in controllers. Details:
+  `Documentation/02-endpoints-and-controllers.md`.
 
 ### Request flow
 
-Controller → `IMediator.Send(command/query)` → Application handler → (future) Persistence repository
-for reads/writes, and/or `IPublishEndpoint.Publish(...)` (MassTransit) to emit an event onto RabbitMQ for
-another service to consume. See `Application/MediatR/Public/ContactForm/` for the reference
-implementation of this pattern (command → handler → publish `ContactFormSubmittedEvent`).
+Controller → `IMediator.Send(command/query)` → Application handler → Persistence Reader/Writer for
+reads/writes, and/or `IEventPublisher.PublishAsync(...)` (wraps MassTransit) to emit an event onto
+RabbitMQ for another service to consume. See `Application/MediatR/Public/ContactForm/` for the
+hand-written reference pattern, and `Application/MediatR/Catalog/` for the generic pattern used by the six
+admin-managed catalog models.
 
 ### Controller convention
 
-All public-facing controllers inherit `API.Controllers.PublicController` (route base `/api/public`),
-live under `API/Controllers/PublicControllers/`, and are `[AllowAnonymous]`. There is no authenticated
-controller base yet — when adding one, follow the same "abstract base class carries the route prefix"
-pattern.
+Three access-tier base classes carry route prefix + auth attribute: `PublicController` (`/api/public`,
+`[AllowAnonymous]`, rare — most of the app requires a signed-in user), `UserController` (`/api/user`,
+`[Authorize]`), `AdminController` (`/api/admin`, `[Authorize(Roles = "admin")]`). Concrete controllers for
+the six catalog models instead inherit from the generic `ReadCatalogController<T>`/
+`ReadWriteCatalogController<T>` (C# only allows one base class, and the CQRS-shape axis and the
+access-tier axis both want that slot) and apply `[Route]`/`[Authorize(...)]` directly. Full details incl.
+the complete endpoint table: `Documentation/02-endpoints-and-controllers.md`.
 
-**Before adding any `/api/user`, `/api/admin` or `/hubs` endpoint, read the "Autentisering og autorisering"
-section of `RECIPE_BACKEND_NOTES.md`.** It defines the auth procedure: Core API validates the JWT itself
-(JwtBearer, same key/issuer/audience as the gateway and `recipe-auth-api`), never trusts `X-User-Id`/`X-User-Roles`,
-reads the user id from `ClaimTypes.NameIdentifier` (not `"sub"`), and uses lowercase roles (`admin`/`user`).
+**Before adding any `/api/user`, `/api/admin` or `/hubs` endpoint, read
+`Documentation/05-authentication-and-authorization.md`** (implemented state) and the "Autentisering og
+autorisering" section of `RECIPE_BACKEND_NOTES.md` (full rationale). Core API validates the JWT itself,
+never trusts `X-User-Id`/`X-User-Roles`, reads the user id from `ClaimTypes.NameIdentifier` (not `"sub"`),
+and uses lowercase roles (`admin`/`user`). `Jwt:Key` in `appsettings.Development.json` is currently empty
+— the app throws at startup until it's filled in with the real shared dev key.
 
 ### Domain namespace vs. folder layout
 
@@ -98,16 +109,33 @@ incidentally while touching unrelated code — rename deliberately if asked to.
 - .NET 10, ASP.NET Core Web API, C# nullable-enabled.
 - MediatR for CQRS command/query dispatch.
 - MassTransit + RabbitMQ for async cross-service messaging (connection config under `RabbitMQ:*` in
-  appsettings, defaulted in `API/Extensions/MassTransitExtensions.cs`).
+  appsettings, defaulted in `Application/Extensions/MassTransitExtensions.cs`).
+- Microsoft.AspNetCore.Authentication.JwtBearer for auth (`API/Extensions/JwtAuthenticationExtensions.cs`) —
+  Core API validates the JWT itself, doesn't just trust the gateway.
+- Dapper + Npgsql for data access, `dbup-postgresql` for migrations (numbered scripts in
+  `Persistence/Scripts/`, convention documented in `Documentation/06-persistence-and-data-access.md`).
+- SignalR for realtime push — wired (`Application/Realtime/RecipeHub.cs`, `/hubs/recipe`) but the hub has
+  no methods yet, built ahead of need as a placeholder.
 - Serilog (Console + Seq sinks) for structured logging, configured via `API/Extensions/SerilogsExtensions.cs`
   and the `Serilog` section in appsettings.
-- Planned but not yet wired: Dapper/Dapper.Plus + Npgsql for data access, `dbup-postgresql` for
-  migrations, SignalR for realtime push to the frontend.
+- xUnit + NSubstitute for testing (`Tests/`) — not FluentAssertions, its v8+ license requires payment for
+  commercial use.
 
 ## Documentation
 
-When asked to write or update documentation, follow `DOCUMENTATION_GUIDE.md` (file layout, structure, tone,
-and which sibling-repo docs to flag afterwards). Do not edit sibling repos without asking.
+`Documentation/` holds the technical deep-dives (numbered, one topic per file — see
+`DOCUMENTATION_GUIDE.md` for the format/tone rules when writing or updating one):
+
+- `01-architecture-and-setup.md` — project graph, folder conventions, running locally.
+- `02-endpoints-and-controllers.md` — full endpoint table, access tiers, controller pattern.
+- `03-cqrs-and-mediatr.md` — MediatR usage, the generic catalog pattern, DI registration gotcha.
+- `04-events-and-messaging.md` — MassTransit/RabbitMQ, `IEventPublisher`, message contracts, SignalR status.
+- `05-authentication-and-authorization.md` — JWT validation, access tiers, known gaps and open questions.
+- `06-persistence-and-data-access.md` — Dapper pattern, SQL script numbering, connection setup.
+- `07-test-strategy.md` — test tooling, what's covered, what's not.
+
+`RECIPE_BACKEND_NOTES.md` (repo root) holds the domain model's design rationale — the "why", not the "how
+it's wired". Do not edit sibling-repo docs without asking the user first.
 
 ## Language note
 
