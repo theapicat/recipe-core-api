@@ -9,6 +9,8 @@
     <ItemGroup>
       <PackageReference Include="Dapper" Version="2.1.79" />
       <PackageReference Include="dbup-postgresql" Version="7.0.1" />
+      <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.11" />
+      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
       <PackageReference Include="Npgsql" Version="10.0.3" />
       <PackageReference Include="Z.Dapper.Plus" Version="9.3.4" />
     </ItemGroup>
@@ -18,9 +20,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Implementation\" />
-      <Folder Include="Intefaces\" />
-      <Folder Include="Scripts\" />
+      <EmbeddedResource Include="Scripts\**\*.sql" />
     </ItemGroup>
 
 </Project>

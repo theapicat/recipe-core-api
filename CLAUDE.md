@@ -64,6 +64,11 @@ live under `API/Controllers/PublicControllers/`, and are `[AllowAnonymous]`. The
 controller base yet — when adding one, follow the same "abstract base class carries the route prefix"
 pattern.
 
+**Before adding any `/api/user`, `/api/admin` or `/hubs` endpoint, read the "Autentisering og autorisering"
+section of `RECIPE_BACKEND_NOTES.md`.** It defines the auth procedure: Core API validates the JWT itself
+(JwtBearer, same key/issuer/audience as the gateway and `recipe-auth-api`), never trusts `X-User-Id`/`X-User-Roles`,
+reads the user id from `ClaimTypes.NameIdentifier` (not `"sub"`), and uses lowercase roles (`admin`/`user`).
+
 ### Domain namespace vs. folder layout
 
 Domain classes physically live under `Domain/<Area>/` (matching the `Domain` project structure), but their
@@ -98,6 +103,11 @@ incidentally while touching unrelated code — rename deliberately if asked to.
   and the `Serilog` section in appsettings.
 - Planned but not yet wired: Dapper/Dapper.Plus + Npgsql for data access, `dbup-postgresql` for
   migrations, SignalR for realtime push to the frontend.
+
+## Documentation
+
+When asked to write or update documentation, follow `DOCUMENTATION_GUIDE.md` (file layout, structure, tone,
+and which sibling-repo docs to flag afterwards). Do not edit sibling repos without asking.
 
 ## Language note
 

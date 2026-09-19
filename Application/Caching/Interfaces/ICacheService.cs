@@ -1,11 +1,14 @@
 namespace Application.Caching.Interfaces;
 
 /// <summary>
-/// Cache for data som sjelden endres, f.eks. admin-kataloger (kategorier, allergener, enheter).
+/// Rene cache-primitiver - ingen kjennskap til hvor data kommer fra ved cache-miss.
+/// Den avgjørelsen (hente fra database, evt. andre kilder) ligger hos den som kaller cachen.
 /// </summary>
 public interface ICacheService
 {
-    Task<T> GetOrCreateAsync<T>(string key, Func<Task<T>> factory, TimeSpan? expiration = null);
+    T? Get<T>(string key);
+
+    void Set<T>(string key, T value, TimeSpan? expiration = null);
 
     void Remove(string key);
 }

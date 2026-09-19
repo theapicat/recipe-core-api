@@ -10,6 +10,7 @@ builder.Host.AddSerilogLogging();
 builder.Configuration.MigrateDatabase();
 
 builder.Services.AddApplicationServices(builder.Configuration);
+builder.Services.AddJwtAuthentication(builder.Configuration);
 
 builder.Services.AddControllers();
 
@@ -19,6 +20,9 @@ var app = builder.Build();
 app.UseSerilogRequestLogging();
 
 app.UseRouting();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapRealtimeHubs();

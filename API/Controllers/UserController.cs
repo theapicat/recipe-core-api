@@ -4,8 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 [ApiController]
-[Route("/api/public")]
-[AllowAnonymous]
-public abstract class PublicController : ControllerBase
+[Route("/api/user")]
+[Authorize]
+public abstract class UserController : ControllerBase
 {
 }
