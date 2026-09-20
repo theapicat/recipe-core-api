@@ -1,3 +1,4 @@
+using Application.Naming;
 using Application.Results;
 using Domain.Ingredients;
 using MediatR;
@@ -8,16 +9,20 @@ namespace Application.MediatR.User.UnconfirmedIngredients;
 public class CreateUnconfirmedIngredientCommandHandler(
     IUnconfirmedIngredientReader reader,
     IUnconfirmedIngredientWriter writer,
+    IMediator mediator,
     TimeProvider timeProvider)
     : IRequestHandler<CreateUnconfirmedIngredientCommand, Result<UnconfirmedIngredient>>
 {
     public async Task<Result<UnconfirmedIngredient>> Handle(
         CreateUnconfirmedIngredientCommand request, CancellationToken cancellationToken)
     {
-        var name = request.Name?.Trim();
-        if (string.IsNullOrEmpty(name) || name.Length > UnconfirmedIngredientLimits.MaxNameLength)
+        var name = NameNormalizer.Normalize(request.Name);
+        if (name.Length == 0 || name.Length > UnconfirmedIngredientLimits.MaxNameLength)
             return Result<UnconfirmedIngredient>.Invalid(
                 $"Navnet må være mellom 1 og {UnconfirmedIngredientLimits.MaxNameLength} tegn.");
+
+        if (await OfficialIngredientNameCheck.ExistsAsync(mediator, name, cancellationToken))
+            return Result<UnconfirmedIngredient>.Conflict(OfficialIngredientNameCheck.ExistsMessage);
 
         if (await reader.CountByUserAsync(request.UserId) >= UnconfirmedIngredientLimits.MaxPerUser)
             return Result<UnconfirmedIngredient>.Conflict(

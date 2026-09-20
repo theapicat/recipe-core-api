@@ -1,6 +1,8 @@
 using Application.MediatR.User.UnconfirmedIngredients;
+using Application.MediatR.Catalog;
 using Application.Results;
 using Domain.Ingredients;
+using MediatR;
 using NSubstitute;
 using Persistence.Interfaces;
 using Xunit;
@@ -13,7 +15,15 @@ public class CreateUnconfirmedIngredientCommandHandlerTests
     private readonly IUnconfirmedIngredientReader _reader = Substitute.For<IUnconfirmedIngredientReader>();
     private readonly IUnconfirmedIngredientWriter _writer = Substitute.For<IUnconfirmedIngredientWriter>();
 
-    private CreateUnconfirmedIngredientCommandHandler Handler() => new(_reader, _writer, TimeProvider.System);
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
+
+    public CreateUnconfirmedIngredientCommandHandlerTests()
+    {
+        _mediator.Send(Arg.Any<GetAllCatalogQuery<IngredientListItem>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<IngredientListItem>());
+    }
+
+    private CreateUnconfirmedIngredientCommandHandler Handler() => new(_reader, _writer, _mediator, TimeProvider.System);
 
     [Theory]
     [InlineData("")]
@@ -35,6 +45,24 @@ public class CreateUnconfirmedIngredientCommandHandlerTests
 
         Assert.Equal(ResultStatus.Invalid, result.Status);
     }
+
+    [Fact]
+    public async Task Handle_ReturnsConflict_WhenAnOfficialIngredientWithTheSameNameExists()
+    {
+        _mediator.Send(Arg.Any<GetAllCatalogQuery<IngredientListItem>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<IngredientListItem> { OfficialItem("gulrot") });
+
+        var result = await Handler().Handle(new CreateUnconfirmedIngredientCommand(_userId, "  Gulrot ", false), CancellationToken.None);
+
+        Assert.Equal(ResultStatus.Conflict, result.Status);
+        await _writer.DidNotReceive().AddAsync(Arg.Any<UnconfirmedIngredient>());
+    }
+
+    private static IngredientListItem OfficialItem(string name) => new()
+    {
+        Id = Guid.NewGuid(), Name = name, CategoryId = Guid.NewGuid(), PrimaryUnitTypeId = Guid.NewGuid(),
+        DefaultUnitId = Guid.NewGuid(), EnergyKcal = 30, IsVerified = true, AllergenIds = [], SearchKeywordIds = []
+    };
 
     [Fact]
     public async Task Handle_ReturnsConflict_WhenTheUserHasReachedTheTotalLimit()
@@ -77,7 +105,7 @@ public class CreateUnconfirmedIngredientCommandHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(_userId, result.Value!.CreatedByUserId);
-        Assert.Equal("Lilla gulrot", result.Value.Name);
+        Assert.Equal("lilla gulrot", result.Value.Name);
         Assert.Equal(expected, result.Value.ReviewStatus);
         Assert.NotEqual(Guid.Empty, result.Value.Id);
         await _writer.Received(1).AddAsync(result.Value);

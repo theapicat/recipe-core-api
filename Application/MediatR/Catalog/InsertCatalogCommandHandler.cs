@@ -13,6 +13,7 @@ public class InsertCatalogCommandHandler<T, TKey>(DbWriter<T> writer, ICacheServ
         if (request.Entity is IHasId<Guid> guidEntity)
             guidEntity.Id = Guid.CreateVersion7();
 
+        CatalogNormalization.Apply(request.Entity);
         await writer.AddAsync(request.Entity);
         cache.Remove(CatalogCacheKey.ForAll<T>());
         return request.Entity.Id;

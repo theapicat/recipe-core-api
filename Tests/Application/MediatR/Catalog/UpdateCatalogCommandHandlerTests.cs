@@ -38,4 +38,16 @@ public class UpdateCatalogCommandHandlerTests
         Assert.Same(entity, writer.Updated);
         cache.Received(1).Remove(Arg.Any<string>());
     }
+
+    [Fact]
+    public async Task Handle_StoresTheNameLowercaseAndTrimmed()
+    {
+        var entity = new IngredientCategory { Id = Guid.NewGuid(), Name = " Nøtter OG frø " };
+        var writer = new RecordingWriter();
+        var handler = new UpdateCatalogCommandHandler<IngredientCategory>(writer, Substitute.For<ICacheService>());
+
+        await handler.Handle(new UpdateCatalogCommand<IngredientCategory>(entity), CancellationToken.None);
+
+        Assert.Equal("nøtter og frø", writer.Updated!.Name);
+    }
 }

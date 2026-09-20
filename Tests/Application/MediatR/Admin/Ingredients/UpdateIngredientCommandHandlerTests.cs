@@ -38,7 +38,7 @@ public class UpdateIngredientCommandHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(id, writer.Updated!.Id);
-        Assert.Equal("Slangeagurk", writer.Updated.Name);
+        Assert.Equal("slangeagurk", writer.Updated.Name);
         cache.Received(1).Remove(IngredientTestData.IngredientListCacheKey);
     }
 }

@@ -10,7 +10,7 @@ namespace Application.Extensions;
 
 public static class CatalogExtensions
 {
-    // Katalogmodeller med full CRUD (lesing med cache + skriving) via den generiske CQRS-malen i
+    // Adminstyrte katalogmodeller med full CRUD (lesing med cache + skriving) via den generiske CQRS-malen i
     // Application.MediatR.Catalog, sammen med nøkkeltypen. Legg til nye katalogtyper her etter hvert som de får
     // en tilsvarende Reader/Writer i Persistence.
     // Domain.Units.Unit/UnitType er alias-et siden "Unit" ellers kolliderer med MediatR.Unit.
@@ -21,8 +21,7 @@ public static class CatalogExtensions
         (typeof(SearchKeyword), typeof(Guid)),
         (typeof(DomainUnitType), typeof(Guid)),
         (typeof(DomainUnit), typeof(Guid)),
-        (typeof(RecipeCategory), typeof(Guid)),
-        (typeof(NutrientDefinition), typeof(string))
+        (typeof(RecipeCategory), typeof(Guid))
     ];
 
     // MediatR sin assembly-scanning registrerer ikke ekte åpne generiske handlers der TRequest og
@@ -44,6 +43,10 @@ public static class CatalogExtensions
         // lesing gjenbruker malen: lista (lettvekts-projeksjon, cachet) og enkeltoppslag av den fulle modellen.
         AddGetAll(services, typeof(IngredientListItem));
         AddGetById(services, typeof(Ingredient), typeof(Guid));
+
+        // Næringsstoffer er en statisk katalog fylt av seed-data: kun lesing, ingen skrivekommandoer.
+        AddGetAll(services, typeof(NutrientDefinition));
+        AddGetById(services, typeof(NutrientDefinition), typeof(string));
 
         return services;
     }

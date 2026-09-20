@@ -1,3 +1,4 @@
+using Application.Naming;
 using Application.Results;
 using Domain.Ingredients;
 using MediatR;
@@ -7,14 +8,15 @@ namespace Application.MediatR.User.UnconfirmedIngredients;
 
 public class RenameOwnUnconfirmedIngredientCommandHandler(
     IUnconfirmedIngredientReader reader,
-    IUnconfirmedIngredientWriter writer)
+    IUnconfirmedIngredientWriter writer,
+    IMediator mediator)
     : IRequestHandler<RenameOwnUnconfirmedIngredientCommand, Result<UnconfirmedIngredient>>
 {
     public async Task<Result<UnconfirmedIngredient>> Handle(
         RenameOwnUnconfirmedIngredientCommand request, CancellationToken cancellationToken)
     {
-        var name = request.Name?.Trim();
-        if (string.IsNullOrEmpty(name) || name.Length > UnconfirmedIngredientLimits.MaxNameLength)
+        var name = NameNormalizer.Normalize(request.Name);
+        if (name.Length == 0 || name.Length > UnconfirmedIngredientLimits.MaxNameLength)
             return Result<UnconfirmedIngredient>.Invalid(
                 $"Navnet må være mellom 1 og {UnconfirmedIngredientLimits.MaxNameLength} tegn.");
 
@@ -24,6 +26,9 @@ public class RenameOwnUnconfirmedIngredientCommandHandler(
 
         if (ingredient.ReviewStatus != UnconfirmedIngredientStatus.NotRequested)
             return Result<UnconfirmedIngredient>.Conflict("Ingrediensen kan bare endres før en forespørsel er sendt.");
+
+        if (await OfficialIngredientNameCheck.ExistsAsync(mediator, name, cancellationToken))
+            return Result<UnconfirmedIngredient>.Conflict(OfficialIngredientNameCheck.ExistsMessage);
 
         if (!await writer.RenameAsync(request.Id, request.UserId, name))
             return Result<UnconfirmedIngredient>.Conflict("Ingrediensen kunne ikke endres.");

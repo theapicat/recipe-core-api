@@ -14,7 +14,7 @@ skal alltid matche mappebanen).
 dotnet test Tests/Tests.csproj
 ```
 
-111 tester, alle grønne, ingen ekstern avhengighet (ingen Postgres/RabbitMQ trengs for å kjøre dem).
+126 tester, alle grønne, ingen ekstern avhengighet (ingen Postgres/RabbitMQ trengs for å kjøre dem).
 
 ### Verktøyvalg
 
@@ -33,12 +33,13 @@ dotnet test Tests/Tests.csproj
 | `Persistence/Services/DbReader<T>`/`DbWriter<T>` | `Tests/Persistence/Services/` | Kaster riktig exception-type når en query/command ikke er konfigurert — ingen databaseforbindelse trengs siden feilen kastes før tilkobling åpnes. |
 | `Application/Caching/Services/MemoryCacheService` | `Tests/Application/Caching/` | Get/Set/Remove-primitivene med en ekte `IMemoryCache` (ingen mocking nødvendig). |
 | Generiske katalog-handlers (`GetAll`/`GetById`/`Insert`/`Update`/`Delete`) | `Tests/Application/MediatR/Catalog/` | Cache-treff kaller aldri `DbReader<T>`; cache-miss henter fra reader og fyller cachen; skriveoperasjoner ugyldiggjør cachen; `Delete` returnerer `bool` basert på antall berørte rader. |
-| `CatalogExtensions.AddCatalogHandlers()` | `Tests/Application/Extensions/` | Regresjonstest for et reelt problem oppdaget under utvikling — at alle fem handler-typer faktisk blir registrert for hver av de sju katalogtypene (Guid- og tekstnøkkel) (se [`03-cqrs-and-mediatr.md`](03-cqrs-and-mediatr.md) for hvorfor dette ikke skjer automatisk). |
+| `CatalogExtensions.AddCatalogHandlers()` | `Tests/Application/Extensions/` | Regresjonstest for et reelt problem oppdaget under utvikling — at alle fem handler-typer faktisk blir registrert for hver av de seks skrivbare katalogtypene, og at næringsstoffene kun får lesehandlerne (se [`03-cqrs-and-mediatr.md`](03-cqrs-and-mediatr.md) for hvorfor dette ikke skjer automatisk). |
 | `MassTransitEventPublisher` | `Tests/Application/Messaging/` | Delegerer korrekt til `IPublishEndpoint.Publish`. |
 | `SendContactFormCommandHandler` | `Tests/Application/MediatR/Public/ContactForm/` | Bygger og publiserer riktig hendelse, returnerer `true`. |
-| `ReadCatalogController<T>`/`ReadWriteCatalogController<T>` | `Tests/API/Controllers/` | Riktig HTTP-resultat (`Ok`/`NotFound`/`Created` med server-tildelt id/`BadRequest` uten id på PUT/`NoContent`) basert på hva mediator returnerer, også for tekstnøkler. |
+| `ReadCatalogController<T>`/`ReadWriteCatalogController<T>` | `Tests/API/Controllers/` | Riktig HTTP-resultat (`Ok`/`NotFound`/`Created` med server-tildelt id/`BadRequest` uten id på PUT eller med tomt navn/`NoContent`) basert på hva mediator returnerer, også for tekstnøkler (testet med en lokal testentitet). |
 | `JwtAuthenticationExtensions` | `Tests/API/Extensions/` | Kaster `InvalidOperationException` når `Jwt:Key`/`Issuer`/`Audience` mangler; lykkes når alt er satt. |
-| Server-tildelte id-er (`InsertCatalogCommandHandler`) | `Tests/Application/MediatR/Catalog/` | Guid-nøkler får en ny UUIDv7 (klientens id ignoreres); tekstnøkler (`NutrientDefinition`) beholdes. |
+| Server-tildelte id-er (`InsertCatalogCommandHandler`) | `Tests/Application/MediatR/Catalog/` | Guid-nøkler får en ny UUIDv7 (klientens id ignoreres); tekstnøkler beholdes. |
+| Navnenormalisering | `Tests/Application/Naming/`, `Tests/Application/MediatR/Catalog/`, `…/User/…` | `NameNormalizer` (trim, mellomrom, små bokstaver, æøå); Insert/Update-handlerne lagrer navn og enhetsforkortelse med små bokstaver; ubekreftet ingrediens avvises (`409`) når en offisiell ingrediens har samme navn. Controlleren avviser tomt navn med `400`. |
 | Ingrediens: mapping og validering | `Tests/Application/MediatR/Admin/Ingredients/` | `IngredientMapper` tildeler id til ingrediensen og alle barn og dedupliserer koblinger; validering av tomt navn/negative verdier; create/update/delete-handlere (404, cache-invalidering). |
 | Ingrediens: søk | `Tests/Application/MediatR/Ingredients/` | Filtrering i minnet: navn (også søkeord), kategori, allergen inkluder/ekskluder, søkeord, kombinasjon med OG. |
 | Ubekreftede ingredienser | `Tests/Application/MediatR/User/…` og `…/Admin/UnconfirmedIngredients/` | Grenser (totalt/ventende), tilstandsmaskinen (kun `Pending` kan avgjøres, kun `NotRequested` kan endres), en annen brukers rad gir samme `NotFound` som en manglende, approve/merge/reject. |
@@ -60,6 +61,9 @@ pakken tester derfor kun klassenes funksjonalitet, og skal ikke utvides med ende
   `uuid[]`) er verifisert manuelt mot ekte Postgres (2026-09-20: en engangs Docker-container for skriptene og en
   engangs kjøring mot dev-databasen for hele flyten), ikke med en permanent testpakke. Naturlig neste steg:
   Testcontainers-basert prosjekt som kjører migreringsskriptene mot en ekte Postgres-instans i CI.
+- **Seed-skriptene** (`SeedData/`) er kjørt mot en tom Postgres (engangs-container og dev-databasen, 2026-09-20) med kontroll av
+  antall rader, UUIDv7-id-er og at `CHECK`/unikhetsreglene godtar dem — ikke en permanent test. Hører hjemme i de
+  samme integrasjonstestene som SQL-funksjonene.
 - **`Persistence.Extensions.MigrateDatabase`** — krever en ekte databaseforbindelse, hører hjemme i
   integrasjonstester, ikke enhetstester.
 

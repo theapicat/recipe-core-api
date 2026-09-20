@@ -19,8 +19,7 @@ public class CatalogExtensionsTests
         [typeof(SearchKeyword), typeof(Guid)],
         [typeof(DomainUnitType), typeof(Guid)],
         [typeof(DomainUnit), typeof(Guid)],
-        [typeof(RecipeCategory), typeof(Guid)],
-        [typeof(NutrientDefinition), typeof(string)]
+        [typeof(RecipeCategory), typeof(Guid)]
     ];
 
     private static Type Handler(Type request, Type response) => typeof(IRequestHandler<,>).MakeGenericType(request, response);
@@ -46,6 +45,25 @@ public class CatalogExtensionsTests
             typeof(UpdateCatalogCommand<>).MakeGenericType(entity), typeof(bool)));
         Assert.Contains(services, sd => sd.ServiceType == Handler(
             typeof(DeleteCatalogCommand<,>).MakeGenericType(entity, key), typeof(bool)));
+    }
+
+    [Fact]
+    public void AddCatalogHandlers_RegistersOnlyReadHandlers_ForNutrientDefinitions()
+    {
+        var services = new ServiceCollection();
+
+        services.AddCatalogHandlers();
+
+        Assert.Contains(services, sd => sd.ServiceType == Handler(
+            typeof(GetAllCatalogQuery<NutrientDefinition>), typeof(List<NutrientDefinition>)));
+        Assert.Contains(services, sd => sd.ServiceType == Handler(
+            typeof(GetCatalogByIdQuery<NutrientDefinition, string>), typeof(NutrientDefinition)));
+        Assert.DoesNotContain(services, sd => sd.ServiceType == Handler(
+            typeof(InsertCatalogCommand<NutrientDefinition, string>), typeof(string)));
+        Assert.DoesNotContain(services, sd => sd.ServiceType == Handler(
+            typeof(UpdateCatalogCommand<NutrientDefinition>), typeof(bool)));
+        Assert.DoesNotContain(services, sd => sd.ServiceType == Handler(
+            typeof(DeleteCatalogCommand<NutrientDefinition, string>), typeof(bool)));
     }
 
     [Fact]

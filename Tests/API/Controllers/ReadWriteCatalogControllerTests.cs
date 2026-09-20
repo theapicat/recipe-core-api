@@ -1,5 +1,7 @@
+using API.Controllers;
 using API.Controllers.AdminControllers.Catalog;
 using Application.MediatR.Catalog;
+using Domain;
 using Domain.Ingredients;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +12,13 @@ namespace Tests.API.Controllers;
 
 public class ReadWriteCatalogControllerTests
 {
+    private class TextKeyEntity : IHasId<string>
+    {
+        public required string Id { get; set; }
+    }
+
+    private class TextKeyController(IMediator mediator) : ReadWriteCatalogController<TextKeyEntity, string>(mediator);
+
     [Fact]
     public async Task Insert_ReturnsCreated_WithTheServerAssignedId()
     {
@@ -54,12 +63,37 @@ public class ReadWriteCatalogControllerTests
     [Fact]
     public async Task Update_ReturnsBadRequest_WhenStringKeyIsBlank()
     {
-        var controller = new AdminNutrientDefinitionController(Substitute.For<IMediator>());
-        var entity = new NutrientDefinition { Id = " ", Name = "x", Unit = "g", DecimalPrecision = 1 };
+        var controller = new TextKeyController(Substitute.For<IMediator>());
 
-        var result = await controller.Update(entity, CancellationToken.None);
+        var result = await controller.Update(new TextKeyEntity { Id = " " }, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Insert_ReturnsBadRequest_WhenTheNameIsBlank(string name)
+    {
+        var mediator = Substitute.For<IMediator>();
+        var controller = new AdminAllergenController(mediator);
+
+        var result = await controller.Insert(new Allergen { Name = name }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await mediator.DidNotReceiveWithAnyArgs().Send<Guid>(default!, default);
+    }
+
+    [Fact]
+    public async Task Update_ReturnsBadRequest_WhenTheNameIsBlank()
+    {
+        var mediator = Substitute.For<IMediator>();
+        var controller = new AdminAllergenController(mediator);
+
+        var result = await controller.Update(new Allergen { Id = Guid.NewGuid(), Name = " " }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await mediator.DidNotReceiveWithAnyArgs().Send<bool>(default!, default);
     }
 
     [Fact]

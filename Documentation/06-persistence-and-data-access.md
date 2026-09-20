@@ -62,7 +62,8 @@ finnes **bare** når modellen trenger metoder utover malen.
   `Writer`) siden den trenger spørringer per bruker/status, telling til grenser og statusendringer. Endrende metoder
   returnerer `bool` (`false` = ingen rad matchet vilkåret: finnes ikke, feil eier eller feil status). `ResolveAsync`
   oppretter evt. en ny ingrediens, avgjør forespørselen og flytter oppskriftslinjer i én transaksjon.
-- **`NutrientDefinition`** — vanlig mal, men med `string`-nøkkel.
+- **`NutrientDefinition`** — statisk og skrivebeskyttet: bare `NutrientDefinitionReader`, ingen Writer og ingen
+  `insert_/update_/delete_nutrient_definition` i SQL. Radene (inkl. `is_group` og `sort_order`) kommer kun fra seed-data.
 
 ---
 
@@ -83,7 +84,7 @@ DbUp kjører hvert skript **én gang** og journalfører navnet i `schemaversions
 | Endre spørringer | `21000`–`29999` | |
 | Kommandoer (skriving) | `30000`–`30999` | `INSERT`/`UPDATE`/`DELETE`-funksjoner. |
 | Endre kommandoer | `31000`–`39999` | |
-| Seed-data | `Persistence/Scripts/SeedData/seed_<beskrivelse>.sql` | Ikke tallprefiks — undermappen sorterer etter alle numeriske skript. Ingen seed-skript ennå (kommer etter at katalogene er ferdige). |
+| Seed-data | `Persistence/Scripts/SeedData/seed_<nn>_<beskrivelse>.sql` | Undermappen sorterer etter alle numeriske skript (siffer før bokstaver). Innad i mappen styrer tosifret `<nn>` rekkefølgen (avhengigheter først) — se «Seed-data» under. |
 
 Hver kategori har 1000 plasser til «opprett» og 9000 til «endre» — mer enn nok, siden endringer er langt hyppigere enn
 nye feature-grupper.
@@ -100,6 +101,35 @@ Bygget så langt (alle for feature-gruppen oppskrifter/ingredienser/næring):
   ingrediens (raden + barnefunksjoner), og statusfunksjonene for ubekreftede ingredienser
   (`request_…_review`, `reject_…`, `resolve_…`). `delete_*` og statusfunksjonene returnerer antall berørte rader.
 
+### Seed-data (`Persistence/Scripts/SeedData/`)
+
+Seed-data er vanlige SQL-skript som DbUp kjører (embedded resources, ingen egen kode). De kjører etter alle nummererte skript,
+hvert **én gang** (journalført i `schemaversions`), og er skrevet idempotent (`ON CONFLICT DO NOTHING`) i tillegg.
+
+| Skript | Innhold |
+| --- | --- |
+| `seed_01_nutrient_definitions` | 57 næringsstoffer fra Matvaretabellen + 4 grupperader (`is_group`), med `sort_order`. Skrivebeskyttet katalog. |
+| `seed_02_units` | 3 enhetstyper (vekt, volum, antall), 17 kjerneenheter og 30 antall-enheter avledet av Matvaretabellens porsjonstyper. |
+| `seed_03_ingredient_categories` | 16 ingrediens-kategorier. |
+| `seed_04_allergens` | De 14 EU-allergenene + laktose. |
+| `seed_05_recipe_categories` | 13 oppskriftskategorier. |
+| `seed_10`–`seed_25_ingredients_<kategori>` | 1577 ingredienser (én fil per kategori) med næringsverdier (89 438), porsjoner (2 481) og søkeord (328 unike, 1 312 koblinger). |
+
+- **Små kataloger har faste id-er** (deterministiske UUIDv7-lignende, generert én gang), slik at senere skript kan referere
+  til dem uten å slå opp på navn (navn kan endres av admin). Ingredienser, verdier og søkeord får id fra en midlertidig
+  `pg_temp.seed_uuid_v7()` (Postgres 16 har ikke UUIDv7 innebygd) og kobles på Matvaretabellens matvare-id (`source_id`).
+- **Utvalg:** kun matvarer som brukes som ingredienser eller i måltider — ikke spedbarnsmat, ferdigretter, kosttilskudd,
+  kaker/desserter, snacks. «Diverse matvarer» er fordelt på de andre kategoriene. Admin kan rydde bort det som ikke
+  trengs; manglende ingredienser legges til senere (via admin eller nye seed-skript).
+- **Alle importerte ingredienser har `is_verified = false`:** kilden har ingen allergendata, så `ingredient_allergen` er
+  tom. Allergenfilteret kan derfor ikke stoles på før allergener er tilordnet (planlagt, se `todo.md`).
+- **Næringsverdier** er *per 100 g spiselig del* (Matvaretabellens konvensjon; `edible_part_percent` sier hvor stor del av
+  matvaren som er spiselig), og sparsomme: kun målte verdier lagres (`0` = målt som null, manglende rad = ukjent).
+- Skriptene er generert av et lokalt hjelpescript fra `source-data/*.json` (ikke i repoet); resultatet er deterministisk.
+  Filene er ca. 4 MB til sammen og kjøres på ca. 12 sekunder mot en tom database.
+- **Etter frysepunktet** (første utrulling) endres seed-skript aldri på stedet — nye/endrede data går i et nytt
+  seed-skript med høyere `<nn>`.
+
 ### Idempotente skript og frysepunkt
 
 Alle setninger er idempotente: `CREATE TABLE/INDEX IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`. Det hindrer feil ved
@@ -110,6 +140,14 @@ gjenkjøring, men **endrer ikke et objekt som allerede finnes** (en eksisterende
 stedet og dev-databasen tilbakestilles (`DROP SCHEMA public CASCADE; CREATE SCHEMA public;` — husk at det også fjerner
 `uuid-ossp`-utvidelsen infrastruktur-oppsettet legger inn, som må opprettes på nytt). Fra den første utrullingen
 (staging/produksjon) er de tre filene **skrivebeskyttet**, og alle endringer går i `11000`/`21000`/`31000`-seriene.
+
+### Navn: små bokstaver og unike
+
+Alle navnekolonner (`name` i kataloger, ingrediens, ubekreftet ingrediens; `unit.abbreviation`; `recipe.title`) har
+`CHECK (col = lower(col))`, og katalogtabellene har unik indeks på navnet (`ux_<tabell>_name`; enhet også på
+forkortelsen). Ubekreftede ingredienser har unik `(created_by_user_id, name)` bortsett fra løste (`Approved`/`Merged`,
+som er historikk). Brudd gir `409` via `PostgresExceptionHandler`. `nutrient_definition.name` er unntatt (navn som NaCl
+og EPA beholder store bokstaver). Seed-data må derfor være skrevet med små bokstaver.
 
 ### Primærnøkler
 

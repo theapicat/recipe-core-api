@@ -66,7 +66,7 @@ public class IngredientMapperTests
         var ingredient = IngredientMapper.ToIngredient(request, id);
 
         Assert.Equal(id, ingredient.Id);
-        Assert.Equal("Agurk", ingredient.Name);
+        Assert.Equal("agurk", ingredient.Name);
         Assert.Single(ingredient.AllergenIds);
         Assert.All(ingredient.NutrientValues, v => Assert.Equal(id, v.IngredientId));
         Assert.All(ingredient.Portions, p => Assert.Equal(id, p.IngredientId));

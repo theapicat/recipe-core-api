@@ -1,5 +1,7 @@
+using Application.MediatR.Catalog;
 using Application.MediatR.User.UnconfirmedIngredients;
 using Application.Results;
+using MediatR;
 using NSubstitute;
 using Persistence.Interfaces;
 using Domain.Ingredients;
@@ -12,6 +14,13 @@ public class OwnUnconfirmedIngredientHandlersTests
     private readonly Guid _userId = Guid.NewGuid();
     private readonly IUnconfirmedIngredientReader _reader = Substitute.For<IUnconfirmedIngredientReader>();
     private readonly IUnconfirmedIngredientWriter _writer = Substitute.For<IUnconfirmedIngredientWriter>();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
+
+    public OwnUnconfirmedIngredientHandlersTests()
+    {
+        _mediator.Send(Arg.Any<GetAllCatalogQuery<IngredientListItem>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<IngredientListItem>());
+    }
 
     [Fact]
     public async Task Get_ReturnsNotFound_ForAnotherUsersIngredient_ExactlyLikeAMissingOne()
@@ -45,13 +54,35 @@ public class OwnUnconfirmedIngredientHandlersTests
     {
         var own = UnconfirmedIngredientTestData.Stub(_userId);
         _reader.GetByIdAsync(own.Id).Returns(own);
-        _writer.RenameAsync(own.Id, _userId, "Ny").Returns(true);
+        _writer.RenameAsync(own.Id, _userId, "ny").Returns(true);
 
-        var result = await new RenameOwnUnconfirmedIngredientCommandHandler(_reader, _writer)
+        var result = await new RenameOwnUnconfirmedIngredientCommandHandler(_reader, _writer, _mediator)
             .Handle(new RenameOwnUnconfirmedIngredientCommand(_userId, own.Id, " Ny "), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("Ny", result.Value!.Name);
+        Assert.Equal("ny", result.Value!.Name);
+    }
+
+    [Fact]
+    public async Task Rename_ReturnsConflict_WhenAnOfficialIngredientWithThatNameExists()
+    {
+        var own = UnconfirmedIngredientTestData.Stub(_userId);
+        _reader.GetByIdAsync(own.Id).Returns(own);
+        _mediator.Send(Arg.Any<GetAllCatalogQuery<IngredientListItem>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<IngredientListItem>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(), Name = "gulrot", CategoryId = Guid.NewGuid(), PrimaryUnitTypeId = Guid.NewGuid(),
+                    DefaultUnitId = Guid.NewGuid(), EnergyKcal = 30, IsVerified = true, AllergenIds = [], SearchKeywordIds = []
+                }
+            });
+
+        var result = await new RenameOwnUnconfirmedIngredientCommandHandler(_reader, _writer, _mediator)
+            .Handle(new RenameOwnUnconfirmedIngredientCommand(_userId, own.Id, " Gulrot "), CancellationToken.None);
+
+        Assert.Equal(ResultStatus.Conflict, result.Status);
+        await _writer.DidNotReceiveWithAnyArgs().RenameAsync(default, default, default!);
     }
 
     [Theory]
@@ -64,7 +95,7 @@ public class OwnUnconfirmedIngredientHandlersTests
         var own = UnconfirmedIngredientTestData.Stub(_userId, status);
         _reader.GetByIdAsync(own.Id).Returns(own);
 
-        var result = await new RenameOwnUnconfirmedIngredientCommandHandler(_reader, _writer)
+        var result = await new RenameOwnUnconfirmedIngredientCommandHandler(_reader, _writer, _mediator)
             .Handle(new RenameOwnUnconfirmedIngredientCommand(_userId, own.Id, "Ny"), CancellationToken.None);
 
         Assert.Equal(ResultStatus.Conflict, result.Status);
@@ -77,7 +108,7 @@ public class OwnUnconfirmedIngredientHandlersTests
         var others = UnconfirmedIngredientTestData.Stub(Guid.NewGuid());
         _reader.GetByIdAsync(others.Id).Returns(others);
 
-        var result = await new RenameOwnUnconfirmedIngredientCommandHandler(_reader, _writer)
+        var result = await new RenameOwnUnconfirmedIngredientCommandHandler(_reader, _writer, _mediator)
             .Handle(new RenameOwnUnconfirmedIngredientCommand(_userId, others.Id, "Ny"), CancellationToken.None);
 
         Assert.Equal(ResultStatus.NotFound, result.Status);

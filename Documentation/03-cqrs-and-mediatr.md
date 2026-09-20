@@ -46,10 +46,11 @@ Referanseimplementasjonen for en vanlig, ikke-generisk command:
 
 ## 3. Generisk mønster: `Catalog/`
 
-De adminstyrte katalogene (`IngredientCategory`, `Allergen`, `SearchKeyword`, `UnitType`, `Unit`, `RecipeCategory`,
-`NutrientDefinition`) er strukturelt like og trenger de samme fem operasjonene. I stedet for ett sett handler-kode per
-modell finnes ett generisk sett, parametrisert over modellen `T` og nøkkeltypen `TKey` (`Guid`, eller `string` for
-`NutrientDefinition`):
+De adminstyrte katalogene (`IngredientCategory`, `Allergen`, `SearchKeyword`, `UnitType`, `Unit`, `RecipeCategory`) er
+strukturelt like og trenger de samme fem operasjonene. I stedet for ett sett handler-kode per modell finnes ett
+generisk sett, parametrisert over modellen `T` og nøkkeltypen `TKey` (`Guid`; malen støtter også `string`).
+`NutrientDefinition` er en statisk, skrivebeskyttet katalog og får bare de to lesehandlerne (`AddGetAll`/`AddGetById`
+i `CatalogExtensions`) — ingen Insert/Update/Delete-handler, ingen `DbWriter` og ingen skrivefunksjoner i SQL:
 
 | Type | Retning | Oppførsel |
 | --- | --- | --- |
@@ -66,9 +67,17 @@ og skriveside, slik at nøkkelformatet ikke kan drifte fra hverandre.
 
 Modeller med primærnøkkel implementerer `Domain.IHasId<TKey>`. `InsertCatalogCommandHandler` tildeler
 `Guid.CreateVersion7()` til alle `IHasId<Guid>`-modeller (uansett hva klienten sendte) og returnerer id-en, så
-kontrolleren kan svare `201 Created` med `Location`. For `string`-nøkler (`NutrientDefinition`, Matvaretabellens
-kode) tildeles ingenting — kalleren oppgir den. Derfor er `Id` ikke `required` på Guid-modellene (det ville krevd at
+kontrolleren kan svare `201 Created` med `Location`. For `string`-nøkler tildeles ingenting — kalleren oppgir den
+(ingen skrivbar katalog bruker dette i dag; `NutrientDefinition` har `string`-nøkkel, men er skrivebeskyttet). Derfor er `Id` ikke `required` på Guid-modellene (det ville krevd at
 klienten sendte en id serveren likevel overskriver).
+
+### Navnenormalisering
+
+Insert- og Update-handlerne kaller `CatalogNormalization.Apply` før skriving: navnet (`IHasName`) og enhetens forkortelse
+trimmes, mellomrom slås sammen og alt gjøres om til små bokstaver (`Application.Naming.NameNormalizer`, samme funksjon
+brukes ved ingrediensnavn, ubekreftede ingredienser og søk). Databasen håndhever det samme (unik indeks + `CHECK (name =
+lower(name))`), så en kodesti som glemmer normalisering feiler høylytt i stedet for å lagre feil. Tomt navn avvises av
+kontrolleren med `400`.
 
 ### Hvorfor cache-orkestreringen ligger i handleren, ikke i cache-tjenesten
 

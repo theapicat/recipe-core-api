@@ -13,6 +13,9 @@ public abstract class ReadWriteCatalogController<T, TKey>(IMediator mediator) : 
     [HttpPost]
     public async Task<IActionResult> Insert(T entity, CancellationToken cancellationToken)
     {
+        if (IsNameBlank(entity))
+            return BadRequest("Navn må oppgis.");
+
         var id = await Mediator.Send(new InsertCatalogCommand<T, TKey>(entity), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, entity);
     }
@@ -22,6 +25,9 @@ public abstract class ReadWriteCatalogController<T, TKey>(IMediator mediator) : 
     {
         if (IsMissing(entity.Id))
             return BadRequest("Id må oppgis.");
+
+        if (IsNameBlank(entity))
+            return BadRequest("Navn må oppgis.");
 
         await Mediator.Send(new UpdateCatalogCommand<T>(entity), cancellationToken);
         return Ok();
@@ -33,6 +39,8 @@ public abstract class ReadWriteCatalogController<T, TKey>(IMediator mediator) : 
         await Mediator.Send(new DeleteCatalogCommand<T, TKey>(id), cancellationToken);
         return NoContent();
     }
+
+    private static bool IsNameBlank(T entity) => entity is IHasName { Name: var name } && string.IsNullOrWhiteSpace(name);
 
     private static bool IsMissing(TKey id) =>
         EqualityComparer<TKey>.Default.Equals(id, default!) || (id is string text && string.IsNullOrWhiteSpace(text));

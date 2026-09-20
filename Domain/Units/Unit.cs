@@ -1,6 +1,6 @@
 namespace Domain.Units;
 
-public class Unit : IHasId<Guid>
+public class Unit : IHasId<Guid>, IHasName
 {
     public Guid Id { get; set; }
     public required string Name { get; set; }

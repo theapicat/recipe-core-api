@@ -1,4 +1,5 @@
 using Application.MediatR.Catalog;
+using Application.Naming;
 using Domain.Ingredients;
 using MediatR;
 
@@ -14,7 +15,7 @@ public class SearchIngredientsQueryHandler(IMediator mediator)
         var items = await mediator.Send(new GetAllCatalogQuery<IngredientListItem>(), cancellationToken);
         IEnumerable<IngredientListItem> result = items;
 
-        var name = request.Name?.Trim();
+        var name = NameNormalizer.Normalize(request.Name);
         if (!string.IsNullOrEmpty(name))
         {
             var keywords = await mediator.Send(new GetAllCatalogQuery<SearchKeyword>(), cancellationToken);

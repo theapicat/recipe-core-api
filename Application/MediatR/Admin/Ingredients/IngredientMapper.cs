@@ -1,3 +1,4 @@
+using Application.Naming;
 using Domain.Ingredients;
 
 namespace Application.MediatR.Admin.Ingredients;
@@ -24,7 +25,7 @@ public static class IngredientMapper
     public static Ingredient ToIngredient(IngredientRequest request, Guid id) => new()
     {
         Id = id,
-        Name = request.Name.Trim(),
+        Name = NameNormalizer.Normalize(request.Name),
         CategoryId = request.CategoryId,
         PrimaryUnitTypeId = request.PrimaryUnitTypeId,
         DefaultUnitId = request.DefaultUnitId,

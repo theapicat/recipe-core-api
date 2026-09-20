@@ -121,7 +121,7 @@ CREATE OR REPLACE FUNCTION get_all_nutrient_definition()
 RETURNS SETOF nutrient_definition
 LANGUAGE sql
 AS $$
-    SELECT * FROM nutrient_definition ORDER BY name;
+    SELECT * FROM nutrient_definition ORDER BY sort_order, name;
 $$;
 
 CREATE OR REPLACE FUNCTION get_nutrient_definition_by_id(p_id text)

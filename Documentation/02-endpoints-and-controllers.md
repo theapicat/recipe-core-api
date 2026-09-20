@@ -2,9 +2,10 @@
 
 ---
 
-Full oversikt over registrerte endepunkter per 2026-09-20 (69 stk), verifisert direkte mot ASP.NET Core sin
-`EndpointDataSource` (ikke bare lest ut av kildekoden), og de nye arbeidsflytene i tillegg kjørt mot ekte
-Postgres. Sjekk mot faktisk kode ved tvil.
+Full oversikt over registrerte endepunkter per 2026-09-20 (64 stk: 14 brukerlesing av kataloger, 30 admin-CRUD på
+seks kataloger, 7 ingrediens, 11 ubekreftet ingrediens, 2 offentlige). Antallet ble sist verifisert direkte mot ASP.NET
+Core sin `EndpointDataSource` (da 69, før næringsstoffene ble gjort skrivebeskyttet), og arbeidsflytene er kjørt mot
+ekte Postgres. Sjekk mot faktisk kode ved tvil.
 
 ## 1. Tilgangsnivåer
 
@@ -31,7 +32,12 @@ Full autentiseringsprosedyre står i [`05-authentication-and-authorization.md`](
 
 - **Id-er tildeles alltid av serveren** (`Guid.CreateVersion7()`), og alle opprettelser returnerer `201 Created`
   med `Location`-header og den opprettede ressursen (inkl. id) i kroppen. Klientens eventuelle `id` ignoreres.
-  Unntak: `nutrient-definitions`, der id er Matvaretabellens tekstkode og oppgis av admin.
+  Unntak: `nutrient-definitions`, som er skrivebeskyttet (se §3) og har Matvaretabellens tekstkode som id.
+- **Navn lagres alltid med små bokstaver** (kataloger, søkeord, ingredienser, enhetsforkortelser). Serveren trimmer,
+  slår sammen mellomrom og gjør om til små bokstaver før skriving (`Application.Naming.NameNormalizer`) — også ved
+  søk. Frontend gjør om til stor forbokstav ved visning. Navn må være unike per katalog (unik indeks + `CHECK` i
+  databasen): en duplikat gir `409`, et tomt navn gir `400`. Unntak: næringsstoffnavn (statiske) og fritekst i
+  oppskrifter (beskrivelse, steg, notat).
 - **Statuskoder for feil:** `400` ugyldig innhold, `404` ikke funnet, `409` konflikt — enten en forretningsregel
   (feil status, grense nådd) eller et databasebrudd på fremmednøkkel/unikhet (raden er i bruk, peker på noe som
   ikke finnes, eller finnes fra før). Feil returneres som `ProblemDetails`.
@@ -56,12 +62,12 @@ Full autentiseringsprosedyre står i [`05-authentication-and-authorization.md`](
 
 ## 3. Katalogkontrollere (generisk mal)
 
-Sju adminstyrte kataloger deler samme generiske kontrollerpar — se
+Seks adminstyrte kataloger deler samme generiske kontrollerpar (og næringsstoffene har kun lesing) — se
 [`03-cqrs-and-mediatr.md`](03-cqrs-and-mediatr.md) for hvorfor og hvordan. Konkret kontroller er bare en
 `[Route]`/`[Authorize]`-attributt og én linje arv; all logikk ligger i de to generiske basene.
 
-`<ressurs>` er en av: `ingredient-categories`, `allergens`, `search-keywords`, `unit-types`, `units`,
-`recipe-categories` (Guid-nøkkel) og `nutrient-definitions` (tekstnøkkel).
+`<ressurs>` er en av: `ingredient-categories`, `allergens`, `search-keywords`, `unit-types`, `units` og
+`recipe-categories` (Guid-nøkkel). `nutrient-definitions` (tekstnøkkel) finnes bare som brukerlesing, se under.
 
 ### `UserControllers/Catalog/` — lesing
 
@@ -74,15 +80,21 @@ Sju adminstyrte kataloger deler samme generiske kontrollerpar — se
 | GET | `/api/user/<ressurs>` | Autentisert | Hele katalogen (cachet). |
 | GET | `/api/user/<ressurs>/{id}` | Autentisert | Én rad, alltid fersk fra databasen. |
 
-`nutrient-definitions` returneres som en **flat liste** med `parentId`; hierarkiet (opptil tre nivåer, f.eks.
-`Fett` → `Mettet` → `C12:0Laurinsyre`) bygges av klienten. Id-en kan inneholde mellomrom og tegn som `+` og
-`:` og må URL-enkodes i stien.
+**`nutrient-definitions` er en statisk, skrivebeskyttet katalog** — fylles kun av seed-data, det finnes ingen
+skrive-endepunkter (og ingen admin-kontroller; admin leser via `/api/user/nutrient-definitions` som alle innloggede kan).
+Den returneres som en **flat liste** sortert på `sortOrder` (dybde-først), med `parentId`; hierarkiet (opptil fire
+nivåer, f.eks. `Fett` → `Mettet` → `C12:0Laurinsyre`, eller `FatSolubleVitamins` → `Vit A RE` → `Retinol`) bygges av
+klienten. To slags foreldre: en rad med `isGroup = true` er en ren overskrift uten egen verdi (mineraler, sporstoffer,
+fettløselige og vannløselige vitaminer); en rad med barn og `isGroup = false` (Fett, Karbohydrat ...) har egen verdi —
+totalen — og barna er delverdiene. Id-en kan inneholde mellomrom og tegn som `+` og `:` og må URL-enkodes i stien.
+Næringsstoffnavnene beholder kildens store/små bokstaver (NaCl, EPA). Verdiene per ingrediens (`nutrientValues`) er
+det admin redigerer, via ingrediensen.
 
 ### `AdminControllers/Catalog/` — full CRUD
 
 **Rute-prefiks:** `/api/admin/<ressurs>`
 **Autorisasjon:** `admin`-rolle (`[Authorize(Roles = "admin")]`)
-**Formål:** Administrasjon av katalogene.
+**Formål:** Administrasjon av katalogene (unntatt næringsstoffene, som er skrivebeskyttet).
 
 | Metode | Endepunkt | Tilgang | Formål / Beskrivelse |
 | --- | --- | --- | --- |
