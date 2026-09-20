@@ -4,7 +4,8 @@ using DomainUnit = Domain.Units.Unit;
 
 namespace Application.MediatR.Catalog;
 
-// Normaliserer kataloginnhold før skriving: navn (og enhetens forkortelse) lagres alltid med små bokstaver.
+// Normaliserer kataloginnhold før skriving: navn lagres alltid med små bokstaver. Enhetens forkortelse er et symbol
+// (µg, mg-ATE) og beholder store/små bokstaver - den trimmes bare.
 internal static class CatalogNormalization
 {
     public static void Apply<T>(T entity)
@@ -13,6 +14,6 @@ internal static class CatalogNormalization
             named.Name = NameNormalizer.Normalize(named.Name);
 
         if (entity is DomainUnit unit)
-            unit.Abbreviation = NameNormalizer.Normalize(unit.Abbreviation);
+            unit.Abbreviation = NameNormalizer.Tidy(unit.Abbreviation);
     }
 }

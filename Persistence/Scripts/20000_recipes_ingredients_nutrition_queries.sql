@@ -114,21 +114,47 @@ AS $$
 $$;
 
 -- =========================================================================
--- nutrient_definition (id er tekst - Matvaretabellens kode)
+-- nutrient_definition (id er tekst - Matvaretabellens kode). nutrient_group har ingen egne lesefunksjoner: gruppen leses bare
+-- nøstet i stoffet.
 -- =========================================================================
 
+-- Ett flat rad per stoff med enheten (unit = forkortelsen, unit_type_id) og gruppen (og overordnet gruppe) utfoldet, så
+-- klienten kan vise, omregne/summere og bygge gruppevisningen uten flere oppslag. Persistence bygger raden om til et objekt
+-- med gruppen nøstet inni.
 CREATE OR REPLACE FUNCTION get_all_nutrient_definition()
-RETURNS SETOF nutrient_definition
+RETURNS TABLE (
+    id text, name text, unit_id uuid, unit text, unit_type_id uuid, decimal_precision int, source_url text, sort_order int,
+    group_id uuid, group_name text, group_sort_order int,
+    parent_group_id uuid, parent_group_name text, parent_group_sort_order int
+)
 LANGUAGE sql
 AS $$
-    SELECT * FROM nutrient_definition ORDER BY sort_order, name;
+    SELECT n.id, n.name, n.unit_id, u.abbreviation, u.unit_type_id, n.decimal_precision, n.source_url, n.sort_order,
+           g.id, g.name, g.sort_order,
+           p.id, p.name, p.sort_order
+    FROM nutrient_definition n
+    JOIN unit u ON u.id = n.unit_id
+    JOIN nutrient_group g ON g.id = n.group_id
+    LEFT JOIN nutrient_group p ON p.id = g.parent_group_id
+    ORDER BY n.sort_order;
 $$;
 
 CREATE OR REPLACE FUNCTION get_nutrient_definition_by_id(p_id text)
-RETURNS SETOF nutrient_definition
+RETURNS TABLE (
+    id text, name text, unit_id uuid, unit text, unit_type_id uuid, decimal_precision int, source_url text, sort_order int,
+    group_id uuid, group_name text, group_sort_order int,
+    parent_group_id uuid, parent_group_name text, parent_group_sort_order int
+)
 LANGUAGE sql
 AS $$
-    SELECT * FROM nutrient_definition WHERE id = p_id;
+    SELECT n.id, n.name, n.unit_id, u.abbreviation, u.unit_type_id, n.decimal_precision, n.source_url, n.sort_order,
+           g.id, g.name, g.sort_order,
+           p.id, p.name, p.sort_order
+    FROM nutrient_definition n
+    JOIN unit u ON u.id = n.unit_id
+    JOIN nutrient_group g ON g.id = n.group_id
+    LEFT JOIN nutrient_group p ON p.id = g.parent_group_id
+    WHERE n.id = p_id;
 $$;
 
 -- =========================================================================

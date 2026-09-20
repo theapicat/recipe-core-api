@@ -18,7 +18,7 @@ else — start with `Documentation/01-architecture-and-setup.md`).
 dotnet build                          # build the whole solution
 dotnet run --project API              # run the API (http://localhost:5002, see API/Properties/launchSettings.json)
 dotnet watch --project API run        # run with hot reload
-dotnet test Tests/Tests.csproj        # run unit tests (126 tests, no external dependencies needed)
+dotnet test Tests/Tests.csproj        # run unit tests (131 tests, no external dependencies needed)
 ```
 
 Local dependencies (Postgres, RabbitMQ, Seq) are expected to run externally (e.g. via the platform's
@@ -95,8 +95,8 @@ the app throws at startup if any is missing.
 - Admin-managed lookup catalogs (`RecipeCategory`, `IngredientCategory`, `Allergen`, `UnitType`,
   `SearchKeyword`) all share a simple `{Id, Name}` shape.
 - Ids are always assigned by the server (`Guid.CreateVersion7()`, via `IHasId<TKey>`) and returned by every create
-  (`201` + `Location`). `NutrientDefinition` is a static, **read-only** catalog (Matvaretabellen text ids, `IsGroup`/`SortOrder`, filled only by seed data) — there is deliberately no write endpoint, writer or SQL write function for it.
-- Names (catalogs, ingredients, keywords, unit abbreviations, recipe titles) are stored lowercase and unique, normalized by `Application.Naming.NameNormalizer` and enforced by SQL (`CHECK` + unique index); the frontend capitalizes for display. Nutrient names and free text (descriptions, steps, notes) are exempt.
+  (`201` + `Location`). `NutrientDefinition` is a static, **read-only** catalog (text ids from Matvaretabellen, filled only by seed data; only GET list/by-id): each nutrient has a `UnitId` uuid foreign key to `unit` and a nested `Group` (with `Group.ParentGroup`), and nutrient groups have no endpoints, reader or writer of their own — there is deliberately no write path for any of it, and no `parent_id` on nutrients (hierarchy = groups).
+- Names (catalogs, ingredients, keywords, recipe titles) are stored lowercase and unique, normalized by `Application.Naming.NameNormalizer` and enforced by SQL (`CHECK` + unique index); the frontend capitalizes for display. Exempt: nutrient names, unit abbreviations (symbols like `µg`, `mg-ATE`) and free text (descriptions, steps, notes).
 - `UnconfirmedIngredient` has a review lifecycle (`NotRequested → Pending → Approved | Merged | Rejected`); approve
   can create the ingredient as a variant (`Ingredient.VariantOfIngredientId`) of another. See
   `Documentation/02-endpoints-and-controllers.md` §5.
@@ -115,7 +115,7 @@ the app throws at startup if any is missing.
   `Persistence/Scripts/`: `10000` tables, `20000` queries, `30000` commands, `11000/21000/31000` for changes —
   convention, idempotency rules and the freeze point are in `Documentation/06-persistence-and-data-access.md`).
   Reference and ingredient data is seeded by SQL scripts in `Persistence/Scripts/SeedData/` (`seed_<nn>_*.sql`, run by DbUp
-  after the numbered scripts; 1577 Matvaretabellen ingredients, all `is_verified = false`).
+  after the numbered scripts; 1565 Matvaretabellen ingredients, all `is_verified = false`).
 - SignalR for realtime push — wired (`Application/Realtime/RecipeHub.cs`, `/hubs/recipe`) but the hub has
   no methods yet, built ahead of need as a placeholder.
 - Serilog (Console + Seq sinks) for structured logging, configured via `API/Extensions/SerilogsExtensions.cs`

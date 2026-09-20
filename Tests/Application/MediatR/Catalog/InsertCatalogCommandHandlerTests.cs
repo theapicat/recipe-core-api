@@ -75,15 +75,15 @@ public class InsertCatalogCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_StoresTheUnitAbbreviationLowercaseToo()
+    public async Task Handle_TrimsTheUnitAbbreviationButKeepsItsCase()
     {
-        var entity = new DomainUnit { Name = "Spiseskje", Abbreviation = " SS ", UnitTypeId = Guid.NewGuid(), BaseUnitRatio = 15 };
+        var entity = new DomainUnit { Name = "Spiseskje", Abbreviation = " mg-ATE ", UnitTypeId = Guid.NewGuid(), BaseUnitRatio = 15 };
         var writer = new RecordingWriter<DomainUnit>();
         var handler = new InsertCatalogCommandHandler<DomainUnit, Guid>(writer, Substitute.For<ICacheService>());
 
         await handler.Handle(new InsertCatalogCommand<DomainUnit, Guid>(entity), CancellationToken.None);
 
         Assert.Equal("spiseskje", writer.Inserted!.Name);
-        Assert.Equal("ss", writer.Inserted.Abbreviation);
+        Assert.Equal("mg-ATE", writer.Inserted.Abbreviation);
     }
 }

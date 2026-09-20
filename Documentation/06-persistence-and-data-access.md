@@ -63,7 +63,13 @@ finnes **bare** når modellen trenger metoder utover malen.
   returnerer `bool` (`false` = ingen rad matchet vilkåret: finnes ikke, feil eier eller feil status). `ResolveAsync`
   oppretter evt. en ny ingrediens, avgjør forespørselen og flytter oppskriftslinjer i én transaksjon.
 - **`NutrientDefinition`** — statisk og skrivebeskyttet: bare `NutrientDefinitionReader`, ingen Writer og ingen
-  `insert_/update_/delete_nutrient_definition` i SQL. Radene (inkl. `is_group` og `sort_order`) kommer kun fra seed-data.
+  `insert_/update_/delete_`-funksjoner i SQL; radene kommer kun fra seed-data. `unit_id` er en `uuid`-fremmednøkkel til `unit`,
+  og `group_id` en `uuid`-fremmednøkkel til `nutrient_group` (hoved- og undergrupper via `parent_group_id`; alle id-er er Guid).
+  Hierarkiet ligger i gruppene — det er ingen `parent_id` på stoffene. `nutrient_group` har **ingen egen Reader, funksjon eller
+  endepunkt**: lesefunksjonene (`get_all_nutrient_definition`/`…_by_id`, `RETURNS TABLE`) folder ut enheten (`unit` =
+  forkortelsen, `unit_type_id`) og gruppen (`group_*` og `parent_group_*`) i én flat rad, og readeren
+  (`NutrientDefinitionRow.ToNutrientDefinition`) bygger den om til `NutrientDefinition` med `Group` (og `Group.ParentGroup`)
+  nøstet inni.
 
 ---
 
@@ -108,19 +114,22 @@ hvert **én gang** (journalført i `schemaversions`), og er skrevet idempotent (
 
 | Skript | Innhold |
 | --- | --- |
-| `seed_01_nutrient_definitions` | 57 næringsstoffer fra Matvaretabellen + 4 grupperader (`is_group`), med `sort_order`. Skrivebeskyttet katalog. |
-| `seed_02_units` | 3 enhetstyper (vekt, volum, antall), 17 kjerneenheter og 30 antall-enheter avledet av Matvaretabellens porsjonstyper. |
-| `seed_03_ingredient_categories` | 16 ingrediens-kategorier. |
-| `seed_04_allergens` | De 14 EU-allergenene + laktose. |
-| `seed_05_recipe_categories` | 13 oppskriftskategorier. |
-| `seed_10`–`seed_25_ingredients_<kategori>` | 1577 ingredienser (én fil per kategori) med næringsverdier (89 438), porsjoner (2 481) og søkeord (328 unike, 1 312 koblinger). |
+| `seed_01_units` | 3 enhetstyper (vekt, volum, antall), kjerneenheter (inkl. mg, µg, µg RAE, µg RE, mg-ATE for næringsstoffene) og 30 antall-enheter avledet av Matvaretabellens porsjonstyper. Først, fordi næringsstoffene refererer til enhetene. |
+| `seed_02_nutrient_groups` | 15 næringsgrupper (Guid-id-er): fett (med undergruppene mettede/enumettede/flerumettede fettsyrer), karbohydrat, protein, vitaminer (med undergruppene vitamin a–e), mineraler, sporstoffer, annet. |
+| `seed_03_nutrient_definitions` | 57 næringsstoffer fra Matvaretabellen, med enhet (`unit_id`) og gruppe (`group_id`) som eksplisitte Guid-er (klartekst i en kommentar per rad) og `sort_order` 1–57 i rekkefølgen fett, karbohydrat, protein, vitaminer, mineraler, sporstoffer, annet. Skrivebeskyttet katalog. |
+| `seed_04_ingredient_categories` | 16 ingrediens-kategorier. |
+| `seed_05_allergens` | De 14 EU-allergenene + laktose. |
+| `seed_06_recipe_categories` | 13 oppskriftskategorier. |
+| `seed_10`–`seed_25_ingredients_<kategori>` | 1565 ingredienser (én fil per kategori) med næringsverdier (88 754), porsjoner (2 463) og søkeord (326 unike, 1 306 koblinger). |
 
 - **Små kataloger har faste id-er** (deterministiske UUIDv7-lignende, generert én gang), slik at senere skript kan referere
   til dem uten å slå opp på navn (navn kan endres av admin). Ingredienser, verdier og søkeord får id fra en midlertidig
   `pg_temp.seed_uuid_v7()` (Postgres 16 har ikke UUIDv7 innebygd) og kobles på Matvaretabellens matvare-id (`source_id`).
 - **Utvalg:** kun matvarer som brukes som ingredienser eller i måltider — ikke spedbarnsmat, ferdigretter, kosttilskudd,
   kaker/desserter, snacks. «Diverse matvarer» er fordelt på de andre kategoriene. Admin kan rydde bort det som ikke
-  trengs; manglende ingredienser legges til senere (via admin eller nye seed-skript).
+  trengs; manglende ingredienser legges til senere (via admin eller nye seed-skript). Produkter kjøpt ferdig i kafé/bakeri
+  (12 stk, navn med «kjøpt i kafé/bakeri») er tatt ut. Andre ferdigprodukter og retter (yoghurt med smak, ferdigmat …) er
+  bevisst beholdt inntil videre: skillet mellom ingrediens og produkt er ikke avgjort ennå (se `todo.md`).
 - **Alle importerte ingredienser har `is_verified = false`:** kilden har ingen allergendata, så `ingredient_allergen` er
   tom. Allergenfilteret kan derfor ikke stoles på før allergener er tilordnet (planlagt, se `todo.md`).
 - **Næringsverdier** er *per 100 g spiselig del* (Matvaretabellens konvensjon; `edible_part_percent` sier hvor stor del av
@@ -143,9 +152,10 @@ stedet og dev-databasen tilbakestilles (`DROP SCHEMA public CASCADE; CREATE SCHE
 
 ### Navn: små bokstaver og unike
 
-Alle navnekolonner (`name` i kataloger, ingrediens, ubekreftet ingrediens; `unit.abbreviation`; `recipe.title`) har
-`CHECK (col = lower(col))`, og katalogtabellene har unik indeks på navnet (`ux_<tabell>_name`; enhet også på
-forkortelsen). Ubekreftede ingredienser har unik `(created_by_user_id, name)` bortsett fra løste (`Approved`/`Merged`,
+Alle navnekolonner (`name` i kataloger, ingrediens, ubekreftet ingrediens, `nutrient_group`; `recipe.title`) har
+`CHECK (col = lower(col))`, og katalogtabellene har unik indeks på navnet (`ux_<tabell>_name`). `unit.abbreviation` er et
+symbol (`µg`, `mg-ATE`) og er unntatt fra små-bokstav-regelen; den har unik indeks på `lower(abbreviation)`. Siden mikrogram
+er 0,000001 g er `unit.base_unit_ratio` `numeric(20,10)`. Ubekreftede ingredienser har unik `(created_by_user_id, name)` bortsett fra løste (`Approved`/`Merged`,
 som er historikk). Brudd gir `409` via `PostgresExceptionHandler`. `nutrient_definition.name` er unntatt (navn som NaCl
 og EPA beholder store bokstaver). Seed-data må derfor være skrevet med små bokstaver.
 

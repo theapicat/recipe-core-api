@@ -17,14 +17,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_unit_type_name ON unit_type (name);
 CREATE TABLE IF NOT EXISTS unit (
     id              uuid PRIMARY KEY,
     name            text NOT NULL CHECK (name = lower(name)),
-    abbreviation    text NOT NULL CHECK (abbreviation = lower(abbreviation)),
+    -- Symbol (g, ml, µg, mg-ATE): beholder store/små bokstaver, unntatt fra små-bokstav-regelen for navn.
+    abbreviation    text NOT NULL,
     unit_type_id    uuid NOT NULL REFERENCES unit_type (id) ON DELETE RESTRICT,
     -- Forholdstall til enhetstypens basisenhet (f.eks. gram for Vekt) - universelt, ikke ingrediensavhengig.
-    base_unit_ratio numeric(12,4) NOT NULL
+    -- Mange desimaler fordi mikrogram er 0,000001 g.
+    base_unit_ratio numeric(20,10) NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_unit_name ON unit (name);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_unit_abbreviation ON unit (abbreviation);
+-- Forkortelsen er unik uavhengig av store/små bokstaver (l og L er samme symbol).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_unit_abbreviation ON unit (lower(abbreviation));
 
 CREATE INDEX IF NOT EXISTS ix_unit_unit_type_id ON unit (unit_type_id);
 
@@ -56,23 +59,38 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_search_keyword_name ON search_keyword (name
 -- =========================================================================
 -- Næringsstoffer (speiler Matvaretabellens katalog - id er kildens egen kode). Statisk og skrivebeskyttet: fylles kun av
 -- seed-data. Navnene beholder kildens store/små bokstaver (NaCl, EPA ...) - unntatt fra små-bokstav-regelen.
+-- Hierarkiet ligger i nutrient_group (fett -> mettede/enumettede/flerumettede fettsyrer, vitaminer -> vitamin a-e ...), ikke
+-- i en parent_id på stoffene. Enheten er en fremmednøkkel (uuid) til unit. Gruppen leses bare nøstet inni stoffet.
 -- =========================================================================
+
+CREATE TABLE IF NOT EXISTS nutrient_group (
+    id              uuid PRIMARY KEY,
+    name            text NOT NULL CHECK (name = lower(name)),
+    -- Undergruppe: f.eks. "mettede fettsyrer" -> parent_group_id "fett". Null = hovedgruppe.
+    parent_group_id uuid REFERENCES nutrient_group (id) ON DELETE RESTRICT,
+    -- Visningsrekkefølge for gruppene (dybde-først), satt av seed-dataene.
+    sort_order      int NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_nutrient_group_name ON nutrient_group (name);
+CREATE INDEX IF NOT EXISTS ix_nutrient_group_parent_group_id ON nutrient_group (parent_group_id);
 
 CREATE TABLE IF NOT EXISTS nutrient_definition (
     id                text PRIMARY KEY,
     name              text NOT NULL,
-    unit              text NOT NULL,
+    -- Måleenhet (mg, µg ...) - vekten/typen og omregningsforholdet ligger i unit/unit_type.
+    unit_id           uuid NOT NULL REFERENCES unit (id) ON DELETE RESTRICT,
     decimal_precision int  NOT NULL,
-    -- Selvreferanse for hierarki (f.eks. "Mettet" -> parent_id "Fett"). Null = toppnivå.
-    parent_id         text REFERENCES nutrient_definition (id) ON DELETE RESTRICT,
+    -- Gruppen (den innerste, f.eks. "vitamin c" eller "mettede fettsyrer") stoffet hører til. Første stoff i en
+    -- undergruppe er summen for gruppen, resten er delverdiene.
+    group_id          uuid NOT NULL REFERENCES nutrient_group (id) ON DELETE RESTRICT,
     source_url        text,
-    -- true for rene grupperader (mineraler, vitamingrupper ...): overskrift uten egen verdi.
-    is_group          boolean NOT NULL DEFAULT false,
-    -- Visningsrekkefølge (dybde-først gjennom hierarkiet), satt av seed-dataene.
-    sort_order        int NOT NULL DEFAULT 0
+    -- Visningsrekkefølge i hele lista (gruppe for gruppe, dybde-først), satt av seed-dataene.
+    sort_order        int NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS ix_nutrient_definition_parent_id ON nutrient_definition (parent_id);
+CREATE INDEX IF NOT EXISTS ix_nutrient_definition_unit_id ON nutrient_definition (unit_id);
+CREATE INDEX IF NOT EXISTS ix_nutrient_definition_group_id ON nutrient_definition (group_id);
 
 -- =========================================================================
 -- Ingrediens

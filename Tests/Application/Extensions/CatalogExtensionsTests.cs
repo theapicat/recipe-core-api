@@ -66,6 +66,18 @@ public class CatalogExtensionsTests
             typeof(DeleteCatalogCommand<NutrientDefinition, string>), typeof(bool)));
     }
 
+    // Næringsgrupper er nøstet i næringsstoffet og har ingen egne handlers/endepunkter.
+    [Fact]
+    public void AddCatalogHandlers_RegistersNothing_ForNutrientGroups()
+    {
+        var services = new ServiceCollection();
+
+        services.AddCatalogHandlers();
+
+        Assert.DoesNotContain(services, sd => sd.ServiceType.IsGenericType && sd.ServiceType.GenericTypeArguments
+            .Any(t => t.IsGenericType && t.GenericTypeArguments.Contains(typeof(NutrientGroup))));
+    }
+
     [Fact]
     public void AddCatalogHandlers_RegistersReadOnlyHandlers_ForIngredients()
     {

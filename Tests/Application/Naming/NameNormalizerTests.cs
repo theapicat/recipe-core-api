@@ -14,6 +14,12 @@ public class NameNormalizerTests
         Assert.Equal(expected, NameNormalizer.Normalize(input));
 
     [Theory]
+    [InlineData("  µg   RAE ", "µg RAE")]
+    [InlineData("mg-ATE", "mg-ATE")]
+    public void Tidy_TrimsAndCollapsesWhitespaceButKeepsCase(string input, string expected) =>
+        Assert.Equal(expected, NameNormalizer.Tidy(input));
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]

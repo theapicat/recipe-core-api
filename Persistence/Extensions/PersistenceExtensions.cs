@@ -36,7 +36,7 @@ public static class PersistenceExtensions
         services.AddScoped<DbReader<RecipeCategory>, RecipeCategoryReader>();
         services.AddScoped<DbWriter<RecipeCategory>, RecipeCategoryWriter>();
 
-        // Næringsstoffer er skrivebeskyttet (kun seed-data): bare Reader, ingen Writer.
+        // Næringsstoffer (med nøstet gruppe og enhet) er skrivebeskyttet, kun seed-data: bare Reader, ingen Writer.
         services.AddScoped<DbReader<NutrientDefinition>, NutrientDefinitionReader>();
 
         services.AddScoped<DbReader<IngredientListItem>, IngredientListItemReader>();

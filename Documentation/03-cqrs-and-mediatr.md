@@ -49,7 +49,7 @@ Referanseimplementasjonen for en vanlig, ikke-generisk command:
 De adminstyrte katalogene (`IngredientCategory`, `Allergen`, `SearchKeyword`, `UnitType`, `Unit`, `RecipeCategory`) er
 strukturelt like og trenger de samme fem operasjonene. I stedet for ett sett handler-kode per modell finnes ett
 generisk sett, parametrisert over modellen `T` og nøkkeltypen `TKey` (`Guid`; malen støtter også `string`).
-`NutrientDefinition` er en statisk, skrivebeskyttet katalog og får bare de to lesehandlerne (`AddGetAll`/`AddGetById`
+`NutrientDefinition` (med enhet og gruppe nøstet inni) er en statisk, skrivebeskyttet katalog og får bare de to lesehandlerne (`AddGetAll`/`AddGetById`
 i `CatalogExtensions`) — ingen Insert/Update/Delete-handler, ingen `DbWriter` og ingen skrivefunksjoner i SQL:
 
 | Type | Retning | Oppførsel |
@@ -73,8 +73,9 @@ klienten sendte en id serveren likevel overskriver).
 
 ### Navnenormalisering
 
-Insert- og Update-handlerne kaller `CatalogNormalization.Apply` før skriving: navnet (`IHasName`) og enhetens forkortelse
-trimmes, mellomrom slås sammen og alt gjøres om til små bokstaver (`Application.Naming.NameNormalizer`, samme funksjon
+Insert- og Update-handlerne kaller `CatalogNormalization.Apply` før skriving: navnet (`IHasName`) trimmes, mellomrom slås
+sammen og alt gjøres om til små bokstaver (enhetens forkortelse er et symbol — `µg`, `mg-ATE` — og trimmes bare, via
+`NameNormalizer.Tidy`) (`Application.Naming.NameNormalizer`, samme funksjon
 brukes ved ingrediensnavn, ubekreftede ingredienser og søk). Databasen håndhever det samme (unik indeks + `CHECK (name =
 lower(name))`), så en kodesti som glemmer normalisering feiler høylytt i stedet for å lagre feil. Tomt navn avvises av
 kontrolleren med `400`.

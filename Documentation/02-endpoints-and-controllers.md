@@ -2,10 +2,10 @@
 
 ---
 
-Full oversikt over registrerte endepunkter per 2026-09-20 (64 stk: 14 brukerlesing av kataloger, 30 admin-CRUD på
-seks kataloger, 7 ingrediens, 11 ubekreftet ingrediens, 2 offentlige). Antallet ble sist verifisert direkte mot ASP.NET
-Core sin `EndpointDataSource` (da 69, før næringsstoffene ble gjort skrivebeskyttet), og arbeidsflytene er kjørt mot
-ekte Postgres. Sjekk mot faktisk kode ved tvil.
+Full oversikt over registrerte endepunkter per 2026-09-20 (64 stk: 14 brukerlesing av kataloger — seks vanlige, samt
+næringsstoffer —, 30 admin-CRUD på seks kataloger, 7 ingrediens, 11 ubekreftet ingrediens, 2 offentlige). Antallet ble sist
+verifisert direkte mot ASP.NET Core sin `EndpointDataSource` (da 69, før næringsstoffene ble gjort skrivebeskyttet), og
+arbeidsflytene er kjørt mot ekte Postgres. Sjekk mot faktisk kode ved tvil.
 
 ## 1. Tilgangsnivåer
 
@@ -36,7 +36,8 @@ Full autentiseringsprosedyre står i [`05-authentication-and-authorization.md`](
 - **Navn lagres alltid med små bokstaver** (kataloger, søkeord, ingredienser, enhetsforkortelser). Serveren trimmer,
   slår sammen mellomrom og gjør om til små bokstaver før skriving (`Application.Naming.NameNormalizer`) — også ved
   søk. Frontend gjør om til stor forbokstav ved visning. Navn må være unike per katalog (unik indeks + `CHECK` i
-  databasen): en duplikat gir `409`, et tomt navn gir `400`. Unntak: næringsstoffnavn (statiske) og fritekst i
+  databasen): en duplikat gir `409`, et tomt navn gir `400`. Unntak: næringsstoffnavn (statiske), enhetsforkortelser
+  (symboler som `µg`, `mg-ATE` — trimmes, men beholder store/små bokstaver; unike uavhengig av store/små) og fritekst i
   oppskrifter (beskrivelse, steg, notat).
 - **Statuskoder for feil:** `400` ugyldig innhold, `404` ikke funnet, `409` konflikt — enten en forretningsregel
   (feil status, grense nådd) eller et databasebrudd på fremmednøkkel/unikhet (raden er i bruk, peker på noe som
@@ -82,11 +83,21 @@ Seks adminstyrte kataloger deler samme generiske kontrollerpar (og næringsstoff
 
 **`nutrient-definitions` er en statisk, skrivebeskyttet katalog** — fylles kun av seed-data, det finnes ingen
 skrive-endepunkter (og ingen admin-kontroller; admin leser via `/api/user/nutrient-definitions` som alle innloggede kan).
-Den returneres som en **flat liste** sortert på `sortOrder` (dybde-først), med `parentId`; hierarkiet (opptil fire
-nivåer, f.eks. `Fett` → `Mettet` → `C12:0Laurinsyre`, eller `FatSolubleVitamins` → `Vit A RE` → `Retinol`) bygges av
-klienten. To slags foreldre: en rad med `isGroup = true` er en ren overskrift uten egen verdi (mineraler, sporstoffer,
-fettløselige og vannløselige vitaminer); en rad med barn og `isGroup = false` (Fett, Karbohydrat ...) har egen verdi —
-totalen — og barna er delverdiene. Id-en kan inneholde mellomrom og tegn som `+` og `:` og må URL-enkodes i stien.
+Bare lesing: `GET` liste og `GET {id}`. Listen er **flat**, sortert på `sortOrder` 1–57 (gruppe for gruppe, dybde-først).
+
+**Enhet og gruppe er nøstet i næringsstoffet** — det finnes ingen egne endepunkter, Reader eller Writer for dem; de leses bare
+som en del av et stoff:
+- **Enhet:** `unitId` (Guid, fremmednøkkel til enhetstabellen), `unit` (forkortelsen: `g`, `mg`, `µg`, `µg RAE` ...) og
+  `unitTypeId` (enhetstypen, alle er `vekt`). Enhetens `baseUnitRatio` (fra `/api/user/units`) brukes til å omregne/summere
+  næring i en oppskrift.
+- **Gruppe:** `group` = `{ id (Guid), name, sortOrder, parentGroup }` der `parentGroup` (samme form, uten egen `parentGroup`)
+  er satt for undergrupper. Hovedgrupper: `fett`, `karbohydrat`, `protein`, `vitaminer`, `mineraler`, `sporstoffer`, `annet`;
+  undergrupper: `mettede fettsyrer`, `enumettede fettsyrer`, `flerumettede fettsyrer` (under fett) og `vitamin a` … `vitamin e`
+  (under vitaminer). Det finnes ingen `parentId` på stoffene — hierarkiet ligger i gruppene. Klienten bygger visningen
+  (overordnet ↔ dypere) ved å gruppere stoffene på `group`. Stoffer direkte i en hovedgruppe vises før undergruppene;
+  **første stoff i en undergruppe er summen** for gruppen (`Mettet`, `Enumet`, `Flerum`, `Vit A`), resten er delverdiene.
+
+Id-en (tekstkoden, f.eks. `Vit C`) kan inneholde mellomrom og tegn som `+` og `:` og må URL-enkodes i stien.
 Næringsstoffnavnene beholder kildens store/små bokstaver (NaCl, EPA). Verdiene per ingrediens (`nutrientValues`) er
 det admin redigerer, via ingrediensen.
 

@@ -44,7 +44,7 @@ public static class CatalogExtensions
         AddGetAll(services, typeof(IngredientListItem));
         AddGetById(services, typeof(Ingredient), typeof(Guid));
 
-        // Næringsstoffer er en statisk katalog fylt av seed-data: kun lesing, ingen skrivekommandoer.
+        // Næringsstoffer (med gruppen nøstet inni) er en statisk katalog fylt av seed-data: kun lesing, ingen skrivekommandoer.
         AddGetAll(services, typeof(NutrientDefinition));
         AddGetById(services, typeof(NutrientDefinition), typeof(string));
 
