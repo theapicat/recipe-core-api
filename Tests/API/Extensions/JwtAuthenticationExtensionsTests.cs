@@ -33,7 +33,7 @@ public class JwtAuthenticationExtensionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Jwt:Key"] = "a-sufficiently-long-test-signing-key-value",
-                ["Jwt:Issuer"] = "recipe-auth-app",
+                ["Jwt:Issuer"] = "http://recipe-auth-app/",
                 ["Jwt:Audience"] = "recipe-frontend"
             })
             .Build();

@@ -30,15 +30,16 @@ UseRouting() → UseAuthentication() → UseAuthorization() → MapControllers()
 | Core API (`appsettings`) | Gateway | Auth API | Dev-verdi |
 | --- | --- | --- | --- |
 | `Jwt:Key` | `Jwt:Key` | `JWT:SecretKey` | Samme som i gatewayens og Auth API sin dev-config — **ikke skrevet her**. |
-| `Jwt:Issuer` | `Jwt:Issuer` | `JWT:Issuer` | `recipe-auth-app` |
+| `Jwt:Issuer` | `Jwt:Issuer` | `JWT:Issuer` | `http://recipe-auth-app/` |
 | `Jwt:Audience` | `Jwt:Audience` | `JWT:Audience` | `recipe-frontend` |
 
 `AddJwtAuthentication` kaster `InvalidOperationException` ved oppstart hvis noen av de tre mangler.
 
-**⚠️ Nåværende tilstand:** `Jwt:Key` i `API/appsettings.Development.json` er tom per denne datoen —
-API-et starter ikke før den fylles inn manuelt med samme verdi som gateway/Auth API bruker i dev. Ingen
-ekte nøkkel skal noensinne stå i `appsettings.json`; i Docker/produksjon settes den via miljøvariabel
-(`Jwt__Key`).
+Issuer må være skrevet **bokstavelig likt** i alle tre (en absolutt URI med avsluttende `/`). Auth API setter den fast med OpenIddict `SetIssuer`; uten det ville `iss` i tokenet blitt forespørselens URL (`http://localhost:5000/`), og både gatewayen og Core ville avvist tokenet med `401 The issuer … is invalid`.
+
+`Jwt:Key` i `API/appsettings.Development.json` er satt til den delte dev-nøkkelen (identisk med gatewayen og Auth API,
+fylt inn 2026-09-19). Ingen ekte nøkkel skal noensinne stå i `appsettings.json`; i Docker/produksjon settes den via
+miljøvariabel (`Jwt__Key`).
 
 ---
 
@@ -57,10 +58,9 @@ oppsummert:
 Rollenavn er **alltid små bokstaver** (`admin`, `user`) — case-sensitivt. Gatewayen er første
 forsvarslinje, ikke den eneste; Core API håndhever `[Authorize]` selv uansett.
 
-**⚠️ Kjent hull i gateway (ikke rettet her):** gatewayens `AdminUser`-policy sjekker i dag
-`RequireRole("Admin")` (stor bokstav) i `GatewayPolicyExtensions.cs`, mens Auth API utsteder rollen som
-`admin`. Dette gir `403` for et ellers gyldig admin-token *når kallet går gjennom gatewayen* (ikke ved
-direkte kall mot `:5002`). Ikke rediger gateway-repoet selv — si fra til brukeren hvis dette observeres.
+Gatewayens `AdminUser`-policy sjekker `RequireRole("admin")` (små bokstaver), lik rollen Auth API utsteder og
+`[Authorize(Roles = "admin")]` i Core. (Rettet 2026-09-20: policyen sto tidligere som `"Admin"` og ga `403` for gyldige
+admin-token via gatewayen.) Er noe av dette med stor bokstav noe sted, er det en feil.
 
 ---
 
@@ -81,10 +81,16 @@ oppskrift-endepunkter bygges, siden `Recipe.OwnerUserId` skal settes derfra.
 
 ---
 
-## 5. Åpne spørsmål
+## 5. Andre brukeres data og åpne spørsmål
 
-- Skal tilgang til en annen brukers ressurs gi `404` (ikke avslør at den finnes) eller `403`? Ikke
-  avgjort — relevant først når eide ressurser (oppskrifter) får endepunkter.
+**Avgjort (2026-09-19):** En annen brukers data *eksisterer ikke* for den innloggede brukeren. Alle
+brukerspesifikke spørringer (`/api/user/**`) filtrerer på eier hentet fra tokenet (aldri fra body eller
+URL), og treffer de ikke noe, er resultatet «ikke funnet»: en tom liste. Det gir hverken `403` eller en
+`404` som avslører at ressursen finnes. Dette er standard for all brukerspesifikk funksjonalitet.
+
+Åpent: hvilken statuskode og kropp et oppslag, en endring eller en sletting av *én* ressurs på id skal gi
+når ressursen tilhører en annen bruker (svaret skal være det samme som for en id som ikke finnes). Relevant
+først når eide ressurser (oppskrifter) får endepunkter.
 
 ---
 

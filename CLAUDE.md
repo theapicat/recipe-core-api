@@ -123,8 +123,8 @@ incidentally while touching unrelated code — rename deliberately if asked to.
 
 ## Documentation
 
-`Documentation/` holds the technical deep-dives (numbered, one topic per file — see
-`DOCUMENTATION_GUIDE.md` for the format/tone rules when writing or updating one):
+`Documentation/` holds the technical deep-dives (numbered, one topic per file; match the
+format and tone of the existing files when writing or updating one):
 
 - `01-architecture-and-setup.md` — project graph, folder conventions, running locally.
 - `02-endpoints-and-controllers.md` — full endpoint table, access tiers, controller pattern.
