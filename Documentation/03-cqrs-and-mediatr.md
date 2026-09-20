@@ -71,6 +71,17 @@ kontrolleren kan svare `201 Created` med `Location`. For `string`-nøkler tildel
 (ingen skrivbar katalog bruker dette i dag; `NutrientDefinition` har `string`-nøkkel, men er skrivebeskyttet). Derfor er `Id` ikke `required` på Guid-modellene (det ville krevd at
 klienten sendte en id serveren likevel overskriver).
 
+### Oppskrifter: `MediatR/User/Recipes/`
+
+Håndskrevne handlers (ikke den generiske katalogmalen): `GetOwnRecipesQuery`, `GetOwnRecipeQuery`, `CreateRecipeCommand`,
+`UpdateRecipeCommand`, `DeleteRecipeCommand`, `SetRecipeFavoriteCommand`, alle med `UserId` (fra tokenet) som første parameter og `Result`/
+`Result<T>` som svar. `RecipeMapper` validerer (`Validate`) og bygger domenemodellen (`ToRecipe`: server-tildelte id-er, nummerering,
+koketid = sum av steg-timerne, tittel normalisert). `RecipeLimits` samler grensene (`MaxPerUser` = 500 osv.).
+`UnconfirmedIngredientCheck` sikrer at en linje bare bruker brukerens egen, uløste ubekreftede ingrediens. Opprett/oppdater leser
+oppskriften tilbake fra databasen så svaret har ingrediensnavnene med. `GetRecipeNutritionQuery` henter rådata (`RecipeNutritionInput`: linjer,
+porsjoner, næringsverdier) fra `IRecipeReader` og overlater regnestykket til `RecipeNutritionCalculator` — en ren, statisk klasse, så logikken (omregning til
+gram, uspiselig del, kun stoffer med verdi) er enhetstestbar uten database.
+
 ### Navnenormalisering
 
 Insert- og Update-handlerne kaller `CatalogNormalization.Apply` før skriving: navnet (`IHasName`) trimmes, mellomrom slås

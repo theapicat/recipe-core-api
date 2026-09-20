@@ -81,7 +81,9 @@ tokenet (`ClaimTypes.NameIdentifier`; `"sub"` gir bevisst ikke treff). Den bruke
 ingen bruker-id-felt. Enhetstester låser regelen: `Tests/API/Extensions/ClaimsPrincipalExtensionsTests` og
 `Tests/API/Controllers/UnconfirmedIngredientControllerTests` (id kommer fra tokenet, ikke fra body).
 
-**Planlagt — ikke bygget:** oppskrifter (`Recipe.OwnerUserId`) er den neste eide ressursen og skal følge samme mønster.
+**Bygget (2026-09-20):** oppskrifter (`Recipe.OwnerUserId`) følger samme mønster: `UserRecipeController` sender `User.GetUserId()` inn i hver kommando/spørring, alle
+SQL-funksjoner filtrerer på eier (også barnetabellene), og en annen brukers oppskrift gir samme `404` som en id som ikke finnes — verifisert mot ekte Postgres
+(liste tom, detalj/endre/slett/favoritt/næring gir `404`, og en annen brukers ubekreftede ingrediens kan ikke brukes i en oppskrift). Admin har ingen tilgang til andres oppskrifter.
 
 ---
 
@@ -93,7 +95,7 @@ URL), og treffer de ikke noe, er resultatet «ikke funnet»: en tom liste. Det g
 `404` som avslører at ressursen finnes. Dette er standard for all brukerspesifikk funksjonalitet.
 
 **Implementert for ubekreftede ingredienser (2026-09-20):** oppslag, endring og sletting av *én* ressurs på id som
-tilhører en annen bruker gir nøyaktig samme `404` (uten kropp) som en id som ikke finnes — handleren sjekker
+tilhører en annen bruker gir nøyaktig samme `404` (med samme lille `ProblemDetails`-kropp, uten `detail`) som en id som ikke finnes — handleren sjekker
 `CreatedByUserId` mot tokenets bruker, og databasefunksjonene har i tillegg eier i `WHERE`. Verifisert mot ekte
 Postgres. Foreslått som standard også for oppskrifter; endelig avgjørelse tas når de bygges.
 

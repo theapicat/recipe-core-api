@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 meal planning, and user data. It sits behind a YARP gateway and talks to sibling microservices
 (`recipe-scraper-service`, `recipe-notification-service`) over RabbitMQ, not direct HTTP calls. This repo
 is early-stage: the domain model, all catalog models (catalogs, nutrient definitions, ingredients, and users'
-unconfirmed-ingredient requests) and JWT auth are built end-to-end; recipes, meal planning, and shopping lists are not started (see
+unconfirmed-ingredient requests) and JWT auth are built end-to-end; recipes (CRUD, favorite, nutrition calculation) are built end-to-end; meal planning, shopping lists and a product model are not started (see
 `RECIPE_BACKEND_NOTES.md` for the domain model's design rationale, and `Documentation/` for everything
-else — start with `Documentation/01-architecture-and-setup.md`).
+else — start with `Documentation/01-architecture-and-setup.md`; every endpoint with JSON samples is in `Documentation/08-api-reference.md`).
 
 ## Commands
 
@@ -18,7 +18,7 @@ else — start with `Documentation/01-architecture-and-setup.md`).
 dotnet build                          # build the whole solution
 dotnet run --project API              # run the API (http://localhost:5002, see API/Properties/launchSettings.json)
 dotnet watch --project API run        # run with hot reload
-dotnet test Tests/Tests.csproj        # run unit tests (131 tests, no external dependencies needed)
+dotnet test Tests/Tests.csproj        # run unit tests (205 tests, no external dependencies needed)
 ```
 
 Local dependencies (Postgres, RabbitMQ, Seq) are expected to run externally (e.g. via the platform's
@@ -135,6 +135,7 @@ format and tone of the existing files when writing or updating one):
 - `05-authentication-and-authorization.md` — JWT validation, access tiers, known gaps and open questions.
 - `06-persistence-and-data-access.md` — Dapper pattern, SQL script numbering, connection setup.
 - `07-test-strategy.md` — test tooling, what's covered, what's not.
+- `08-api-reference.md` — extended endpoint guide: every endpoint with request/response JSON, errors, limits, rules.
 
 `RECIPE_BACKEND_NOTES.md` (repo root) holds the domain model's design rationale — the "why", not the "how
 it's wired". Do not edit sibling-repo docs without asking the user first.

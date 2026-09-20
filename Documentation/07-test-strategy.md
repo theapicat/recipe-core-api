@@ -14,7 +14,7 @@ skal alltid matche mappebanen).
 dotnet test Tests/Tests.csproj
 ```
 
-131 tester, alle grønne, ingen ekstern avhengighet (ingen Postgres/RabbitMQ trengs for å kjøre dem).
+205 tester, alle grønne (kjørt 2026-09-20), ingen ekstern avhengighet (ingen Postgres/RabbitMQ trengs for å kjøre dem).
 
 ### Verktøyvalg
 
@@ -46,6 +46,8 @@ dotnet test Tests/Tests.csproj
 | Eier fra token | `Tests/API/Controllers/UnconfirmedIngredientControllerTests`, `Tests/API/Extensions/ClaimsPrincipalExtensionsTests` | Bruker-id leses fra `NameIdentifier` og sendes inn i kommandoen; aldri fra body. |
 | Feilmapping | `Tests/API/Extensions/ResultExtensionsTests`, `Tests/API/ExceptionHandlers/` | `Result` → 404/409/400; Postgres FK-/unikhetsbrudd → 409, andre feil ignoreres. |
 | `NutrientDefinitionRow` | `Tests/Persistence/Implementation/` | Den flate raden bygges om til `NutrientDefinition` med gruppen og evt. overordnet gruppe nøstet inni. |
+| Næringsberegning | `Tests/Application/MediatR/User/Recipes/RecipeNutritionCalculatorTests`, `GetRecipeNutritionQueryHandlerTests` | Per 100 g skaleres på gram; per porsjon; kun stoffer med verdi (ingen nuller), katalog-rekkefølge; uspiselig del trekkes fra kun for vektenheter, ikke for porsjonsvekter; porsjon foretrekkes; volum skaleres via største volumporsjon; `ToTaste`/`Unconfirmed`/`NoConversion` rapporteres; kJ utelates uten data. |
+| Oppskrifter | `Tests/Application/MediatR/User/Recipes/`, `Tests/API/Controllers/UserRecipeControllerTests`, `Tests/Persistence/Implementation/RecipeRowTests` | `RecipeMapper` (validering: tittel/beskrivelse, minst ett steg og én ingrediens, én ingrediens-id per linje, mengde 0 = «etter smak», bilde-url; bygging: nummerering, koketid, normalisert tittel); opprett (grense 500, Manual-kilde, eier fra tokenet, ubekreftet ingrediens må være egen og uløst); oppdatering (skrapet → `isEditedFromSource`, låst type/url, behold favoritt/`createdAt`); hent/slett/favoritt gir `NotFound` når ingenting matcher; controlleren bruker bruker-id fra tokenet. *Skrevet 2026-09-20, kjøres og telles først etter gjennomgang.* |
 | `DateTimeOffsetTypeHandler` | `Tests/Persistence/Implementation/` | `DateTime` fra Npgsql tolkes som UTC; skriving sender alltid UTC. |
 
 ---
@@ -62,6 +64,9 @@ pakken tester derfor kun klassenes funksjonalitet, og skal ikke utvides med ende
   `uuid[]`) er verifisert manuelt mot ekte Postgres (2026-09-20: en engangs Docker-container for skriptene og en
   engangs kjøring mot dev-databasen for hele flyten), ikke med en permanent testpakke. Naturlig neste steg:
   Testcontainers-basert prosjekt som kjører migreringsskriptene mot en ekte Postgres-instans i CI.
+- **Oppskrifter og næring** er i tillegg kjørt ende-til-ende mot det ekte API-et og en migrert dev-database (2026-09-20, 37 + 1 kontroller, opprydding etterpå): opprett/hent/
+  endre/favoritt/slett, eierskap (annen bruker → `404`), validering, ubekreftet ingrediens, og næringsberegningen sammenlignet med utregning for hånd (porsjonsvekt, uspiselig del for vektenheter,
+  volumskalering, `ToTaste`/`Unconfirmed`/`NoConversion`) — ikke en permanent test.
 - **Seed-skriptene** (`SeedData/`) er kjørt mot en tom Postgres (engangs-container og dev-databasen, 2026-09-20) med kontroll av
   antall rader, UUIDv7-id-er og at `CHECK`/unikhetsreglene godtar dem — ikke en permanent test. Hører hjemme i de
   samme integrasjonstestene som SQL-funksjonene.

@@ -62,6 +62,18 @@ finnes **bare** når modellen trenger metoder utover malen.
   `Writer`) siden den trenger spørringer per bruker/status, telling til grenser og statusendringer. Endrende metoder
   returnerer `bool` (`false` = ingen rad matchet vilkåret: finnes ikke, feil eier eller feil status). `ResolveAsync`
   oppretter evt. en ny ingrediens, avgjør forespørselen og flytter oppskriftslinjer i én transaksjon.
+- **`Recipe`** — brukereid, så egne grensesnitt i `Persistence/Interfaces/` (`IRecipeReader`/`IRecipeWriter`, ikke `DbReader<T>`-malen):
+  *alle* funksjoner tar eier (`p_owner_user_id`) og filtrerer på den — også barnefunksjonene (`get_recipe_steps`,
+  `get_recipe_ingredients`) — så en annen brukers oppskrift er umulig å lese eller endre selv om id-en er kjent. Lista
+  (`get_all_recipe_list_item`) er lettvekts og sortert på tittel; detaljen leses i ett `QueryMultiple`-kall (rad, steg, linjer med
+  ingrediensnavn via `COALESCE(ingredient.name, unconfirmed_ingredient.name)`). `RecipeWriter` skriver oppskriften og barna i **én
+  transaksjon**; oppdatering endrer bare raden hvis den tilhører eieren (0 rader → rollback, `false`), og erstatter deretter barna (slett + sett
+  inn). `update_recipe` rører aldri eier, kilde-type/-url, favoritt eller `created_at`. `RecipeRow` (flat rad med kilde-kolonnene) bygges
+  om til `Recipe` med nøstet `Source`. `recipe_ingredient.sort_order` (1..n) gir rekkefølgen; `amount` er `NOT NULL DEFAULT 0` (0 = «etter smak»).
+  Næringsberegningen henter rådata via tre eier-filtrerte funksjoner i ett `QueryMultiple`-kall (`get_recipe_by_id` + `get_recipe_nutrition_lines` (linje med enhetstype/-ratio og
+ingrediensens energi/spiselig del) + `get_recipe_nutrition_portions` + `get_recipe_nutrition_values`); regnestykket ligger i C#, ikke i SQL.
+Tabellene har `CHECK`: `servings > 0`, `cook_time_minutes >= 0`, `step_number > 0`, `timer_minutes >= 0`, `amount >= 0`, tittel med
+  små bokstaver.
 - **`NutrientDefinition`** — statisk og skrivebeskyttet: bare `NutrientDefinitionReader`, ingen Writer og ingen
   `insert_/update_/delete_`-funksjoner i SQL; radene kommer kun fra seed-data. `unit_id` er en `uuid`-fremmednøkkel til `unit`,
   og `group_id` en `uuid`-fremmednøkkel til `nutrient_group` (hoved- og undergrupper via `parent_group_id`; alle id-er er Guid).
@@ -134,7 +146,9 @@ hvert **én gang** (journalført i `schemaversions`), og er skrevet idempotent (
   tom. Allergenfilteret kan derfor ikke stoles på før allergener er tilordnet (planlagt, se `todo.md`).
 - **Næringsverdier** er *per 100 g spiselig del* (Matvaretabellens konvensjon; `edible_part_percent` sier hvor stor del av
   matvaren som er spiselig), og sparsomme: kun målte verdier lagres (`0` = målt som null, manglende rad = ukjent).
-- Skriptene er generert av et lokalt hjelpescript fra `source-data/*.json` (ikke i repoet); resultatet er deterministisk.
+- Skriptene ble generert (2026-09-20) av et engangs hjelpescript fra Matvaretabellens rådata (`foods.json`, `nutrients.json`,
+  `food-groups.json`). Rådataene og skriptet ligger ikke i repoet (eier har en kopi utenfor repoet, og dataene kan lastes ned på nytt);
+  **SQL-skriptene er fasit**. Nye eller endrede data går i nye seed-skript.
   Filene er ca. 4 MB til sammen og kjøres på ca. 12 sekunder mot en tom database.
 - **Etter frysepunktet** (første utrulling) endres seed-skript aldri på stedet — nye/endrede data går i et nytt
   seed-skript med høyere `<nn>`.

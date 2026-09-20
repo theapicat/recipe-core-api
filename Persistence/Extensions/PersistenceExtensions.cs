@@ -43,6 +43,9 @@ public static class PersistenceExtensions
         services.AddScoped<DbReader<Ingredient>, IngredientReader>();
         services.AddScoped<DbWriter<Ingredient>, IngredientWriter>();
 
+        services.AddScoped<IRecipeReader, RecipeReader>();
+        services.AddScoped<IRecipeWriter, RecipeWriter>();
+
         services.AddScoped<IUnconfirmedIngredientReader, UnconfirmedIngredientReader>();
         services.AddScoped<IUnconfirmedIngredientWriter, UnconfirmedIngredientWriter>();
 

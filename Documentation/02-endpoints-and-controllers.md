@@ -2,10 +2,11 @@
 
 ---
 
-Full oversikt over registrerte endepunkter per 2026-09-20 (64 stk: 14 brukerlesing av kataloger — seks vanlige, samt
-næringsstoffer —, 30 admin-CRUD på seks kataloger, 7 ingrediens, 11 ubekreftet ingrediens, 2 offentlige). Antallet ble sist
-verifisert direkte mot ASP.NET Core sin `EndpointDataSource` (da 69, før næringsstoffene ble gjort skrivebeskyttet), og
-arbeidsflytene er kjørt mot ekte Postgres. Sjekk mot faktisk kode ved tvil.
+Full oversikt over registrerte endepunkter per 2026-09-20 (71 stk: 14 brukerlesing av kataloger — seks vanlige, samt
+næringsstoffer —, 30 admin-CRUD på seks kataloger, 7 ingrediens, 11 ubekreftet ingrediens, 7 oppskrift, 2 offentlige).
+Antallet ble sist verifisert direkte mot ASP.NET Core sin `EndpointDataSource` (da 69, før næringsstoffene ble gjort
+skrivebeskyttet), og arbeidsflytene (ikke oppskriftene ennå) er kjørt mot ekte Postgres. Sjekk mot faktisk kode ved tvil. **Forespørsel og svar (JSON) for hvert endepunkt, feilformat og grenser står i
+[`08-api-reference.md`](08-api-reference.md).**
 
 ## 1. Tilgangsnivåer
 
@@ -206,7 +207,70 @@ Bare `Pending` kan avgjøres; ellers `409`. Feilaktige id-er i `approve`/`merge`
 
 ---
 
-## 6. Ikke bygget ennå
+## 6. Oppskrifter (`UserControllers/Recipes/`)
 
-Oppskrifter, måltidsplan og handleliste. Varsling til brukeren når en forespørsel avgjøres (e-post via
+**Rute-prefiks:** `/api/user/recipes` · **Autorisasjon:** Autentisert. Oppskrifter er strengt brukereide: eier kommer alltid fra
+tokenet (aldri fra body/rute), alle spørringer filtrerer på eier, og en annen brukers oppskrift gir samme `404` som en id som ikke
+finnes. Admin har ingen tilgang til andres oppskrifter.
+
+**Bare selve oppskriften er en ressurs.** Steg, ingredienslinjer og kilde er en del av oppskriften — de leses og skrives sammen
+med den og har ingen egne endepunkter (koketiden avledes av stegene, så helheten må skrives samlet).
+
+| Metode | Endepunkt | Tilgang | Formål / Beskrivelse |
+| --- | --- | --- | --- |
+| GET | `/api/user/recipes` | Autentisert | **Hele** lista til brukeren som lettvekts `RecipeListItem` (id, tittel, bilde, kategori, koketid, porsjoner, favoritt), sortert på tittel. Ingen paginering og ingen filtre: klienten laster lista én gang og filtrerer/søker selv (tittel, kategori, favoritt). Begrenset av maks 500 oppskrifter. |
+| GET | `/api/user/recipes/{id:guid}` | Autentisert | Hele oppskriften med steg og ingredienslinjer. Hver linje har `name` (ingrediensen, offisiell eller brukerens egen). |
+| POST | `/api/user/recipes` | Autentisert | Oppretter hele oppskriften i én transaksjon → `201` + `Location` + full oppskrift. `409` ved maks 500 oppskrifter eller ugyldig fremmednøkkel (kategori/ingrediens/enhet), `400` ved ugyldig innhold. |
+| PUT | `/api/user/recipes/{id:guid}` | Autentisert | Erstatter hele oppskriften, også steg og ingredienser (de får nye id-er) → `200` + full oppskrift. |
+| DELETE | `/api/user/recipes/{id:guid}` | Autentisert | Sletter (steg og linjer følger med) → `204`. |
+| PUT | `/api/user/recipes/{id:guid}/favorite` | Autentisert | Body `{isFavorite}` → `204`. Egen liten operasjon så favoritt kan slås av/på uten å sende hele oppskriften. |
+| GET | `/api/user/recipes/{id:guid}/nutrition` | Autentisert | Beregnet næring (se under) → `200` / `404`. Hentes når brukeren åpner næringsfanen; ligger bevisst utenfor oppskriften. |
+
+**Forespørselen (`RecipeRequest`)** har ingen id-er og ingen avledede felt: `title`, `description`, `categoryId`, `servings`,
+`imageUrl?`, `imageAttribution?`, `source?: { reference? }`, `steps[{ description, timerMinutes? }]`,
+`ingredients[{ ingredientId | unconfirmedIngredientId, amount?, unitId, note? }]`. Serveren tildeler id-er, nummererer steg og
+ingredienser etter rekkefølge, regner ut `cookTimeMinutes` (summen av steg-timerne), bestemmer kilde-type og tidsstempler.
+
+**Regler:**
+- Tittel (lagres med små bokstaver, som øvrige titler/kategorier), beskrivelse, minst ett steg og minst én ingrediensrad kreves;
+  `servings` ≥ 1. Lengdegrenser og maks 100 steg/ingredienser står i `RecipeLimits`.
+- `amount` er valgfri: utelatt eller `0` betyr «etter smak» (bidrar ikke til næringsberegningen — verdiene er veiledende).
+  Negative mengder gir `400`.
+- En ingrediensrad peker på **nøyaktig én** av `ingredientId` og `unconfirmedIngredientId`. En ubekreftet ingrediens må være
+  brukerens egen og ikke løst (`Approved`/`Merged` er erstattet av en offisiell ingrediens) — ellers `400`. Når admin godkjenner eller slår
+  sammen en ubekreftet ingrediens, flyttes brukerens oppskriftslinjer automatisk til den offisielle.
+- `imageUrl` må være en gyldig http(s)-adresse (bildeopplasting finnes ikke ennå).
+- **Kilde:** brukeren kan bare oppgi fritekst-`reference`. Oppskrifter laget via API-et er alltid `Manual`; `Scraped` (med låst
+  `url`) settes av backend når scraper-tjenesten leverer en oppskrift. Redigeres en skrapet oppskrift, settes `isEditedFromSource`
+  automatisk; type og url kan aldri endres.
+- Grensen på 500 oppskrifter per bruker (`RecipeLimits.MaxPerUser`) er samlet ett sted, så den senere kan gjøres avhengig av kontotype.
+
+### Næring per oppskrift (`GET /recipes/{id}/nutrition`)
+
+Næringen **lagres ikke** i oppskriften og er ikke en del av `GET /recipes/{id}`: den regnes ut på forespørsel fra dagens ingrediensdata
+(`RecipeNutritionCalculator`, en ren klasse uten database), så den aldri er utdatert (admin kan endre ingrediensverdier, og godkjenning/
+sammenslåing av ubekreftede ingredienser flytter linjer). Veiledende, ikke absolutt.
+
+**Svaret:** `servings`, `energyKcal`/`energyKj` (`{total, perServing}`, kun når > 0), `nutrients[{nutrientId, total, perServing}]` — **kun stoffer med
+verdi > 0**, sortert som næringsstoff-katalogen (enhet, navn og gruppe slås opp der på `nutrientId`) —, `countedIngredients`/`totalIngredients` og
+`skippedLines[{recipeIngredientId, name, reason}]` med årsak `ToTaste` (mengde 0), `Unconfirmed` (brukerens egen ingrediens har ingen næringsdata)
+eller `NoConversion` (enheten kan ikke omregnes til gram for ingrediensen). Per porsjon = total / `servings`; den endres ikke når brukeren skalerer porsjoner.
+
+**Fra linje til gram** (alle næringsverdier er per 100 g *spiselig* del):
+1. Ingrediensens egen porsjon for akkurat den enheten (f.eks. 1 stk = 120 g). Porsjonsvektene i Matvaretabellen er vekt av spiselig del
+   (banan: 1 stk = 120 g ved 66 % spiselig), så det trekkes **ikke** fra uspiselig del her.
+2. Vektenhet: mengden er innkjøpt vekt → trekk fra uspiselig del (`edible_part_percent`; ukjent/0/100 = alt spiselig). 500 g hel banan (66 %) = 330 g.
+3. Volumenhet uten egen porsjon: skaleres via ingrediensens største volumporsjon (gram per ml), f.eks. 1 ss ut fra dl-vekten. Ingen fratrekk (volum måles på spiselig/tilberedt mat).
+4. Ellers rapporteres linjen som `NoConversion`.
+
+Enhetstypene kjennes igjen på navnet (`vekt`, `volum` — `Domain.Units.UnitTypeNames`); gis de nytt navn, blir linjene rapportert som ikke omregnbare.
+
+**Planlagt, ikke bygget:** «kopier til en annen bruker» (deling) og opprydding når en konto slettes. **Måltidsplanen** skal ta et *øyeblikksbilde* av næringen
+når et måltid brukes/spises (næringen for det som faktisk ble spist skal ikke endre seg når ingrediensdata senere endres) — beslutning for den funksjonen.
+
+---
+
+## 7. Ikke bygget ennå
+
+Måltidsplan og handleliste. Varsling til brukeren når en forespørsel avgjøres (e-post via
 `recipe-notification-service`, evt. SignalR) er planlagt, men ikke bygget — se `todo.md`.

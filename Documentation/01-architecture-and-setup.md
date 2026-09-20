@@ -11,10 +11,11 @@ Dette dokumentet beskriver den faktiske prosjektstrukturen og hvordan man kommer
 måltidsplanlegging og brukerdata. Den ligger bak en YARP-gateway og snakker med søstertjenester
 (`recipe-scraper-service`, `recipe-notification-service`) over RabbitMQ, aldri direkte HTTP.
 
-Repoet er tidlig i utviklingen: domenemodellen og hele ingrediens-/katalogsiden (kategorier, allergener, enheter,
-næringsstoffer, ingredienser og brukernes ubekreftede ingredienser) er bygget ende-til-ende, men oppskrifter,
-måltidsplan og handleliste er ikke påbegynt ennå. Se
-`RECIPE_BACKEND_NOTES.md` for designbegrunnelsen bak domenemodellen.
+Repoet er tidlig i utviklingen: domenemodellen, hele ingrediens-/katalogsiden (kategorier, allergener, enheter,
+næringsstoffer, ingredienser og brukernes ubekreftede ingredienser) og oppskrifter (CRUD, favoritt og næringsberegning) er bygget
+ende-til-ende, med seedet referansedata og 1 565 ingredienser. Måltidsplan, handleliste og en produkt-modell er ikke påbegynt ennå.
+Se `RECIPE_BACKEND_NOTES.md` for designbegrunnelsen bak domenemodellen og [`08-api-reference.md`](08-api-reference.md)
+for alle endepunkter med forespørsel og svar.
 
 ---
 
@@ -84,6 +85,11 @@ Lokale avhengigheter (Postgres, RabbitMQ, Seq) kjører eksternt (f.eks. via plat
 et søsken-repo) — tilkoblingsverdier ligger i `API/appsettings.Development.json` (localhost, port 5433 for
 Postgres) vs. `API/appsettings.json` (Docker-tjenestenavn som `recipe-core-db`, brukt i
 container-/produksjonsoppsett).
+
+**Databasen:** ved oppstart kjører `MigrateDatabase` (DbUp) alle skript som ikke er kjørt før: tabeller (`10000`), spørringer (`20000`),
+kommandoer (`30000`) og seed-data (`SeedData/seed_*.sql`, ca. 12 sekunder mot en tom database). Før frysepunktet (første utrulling) redigeres
+`10000/20000/30000` på stedet, og dev-databasen tilbakestilles (`DROP SCHEMA public CASCADE; CREATE SCHEMA public;` + `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`) —
+se [`06-persistence-and-data-access.md`](06-persistence-and-data-access.md).
 
 `Jwt:Key` i `appsettings.Development.json` er satt til den delte dev-nøkkelen (identisk med gateway og `recipe-auth-api`).
 API-et kaster `InvalidOperationException` ved oppstart hvis `Jwt:Key`/`Issuer`/`Audience` mangler. Se

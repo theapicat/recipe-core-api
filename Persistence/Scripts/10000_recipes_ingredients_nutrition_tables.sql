@@ -201,8 +201,8 @@ CREATE TABLE IF NOT EXISTS recipe (
     description                   text NOT NULL,
     category_id                   uuid NOT NULL REFERENCES recipe_category (id) ON DELETE RESTRICT,
     -- Summen av recipe_step.timer_minutes for stegene som har en timer - ikke separat inntastet.
-    cook_time_minutes             int NOT NULL,
-    servings                      int NOT NULL,
+    cook_time_minutes             int NOT NULL CHECK (cook_time_minutes >= 0),
+    servings                      int NOT NULL CHECK (servings > 0),
     image_url                     text,
     image_attribution             text,
     is_favorite                   boolean NOT NULL,
@@ -221,9 +221,9 @@ CREATE INDEX IF NOT EXISTS ix_recipe_category_id ON recipe (category_id);
 CREATE TABLE IF NOT EXISTS recipe_step (
     id            uuid PRIMARY KEY,
     recipe_id     uuid NOT NULL REFERENCES recipe (id) ON DELETE CASCADE,
-    step_number   int NOT NULL,
+    step_number   int NOT NULL CHECK (step_number > 0),
     description   text NOT NULL,
-    timer_minutes int,
+    timer_minutes int CHECK (timer_minutes IS NULL OR timer_minutes >= 0),
     UNIQUE (recipe_id, step_number)
 );
 
@@ -233,9 +233,12 @@ CREATE TABLE IF NOT EXISTS recipe_ingredient (
     recipe_id                 uuid NOT NULL REFERENCES recipe (id) ON DELETE CASCADE,
     ingredient_id             uuid REFERENCES ingredient (id) ON DELETE RESTRICT,
     unconfirmed_ingredient_id uuid REFERENCES unconfirmed_ingredient (id) ON DELETE RESTRICT,
-    amount                    numeric(10,3) NOT NULL,
+    -- 0 = ikke oppgitt / «etter smak» (f.eks. salt). Bidrar ikke til næringsberegningen - næringsverdier er veiledende.
+    amount                    numeric(10,3) NOT NULL DEFAULT 0 CHECK (amount >= 0),
     unit_id                   uuid NOT NULL REFERENCES unit (id) ON DELETE RESTRICT,
     note                      text,
+    -- Rekkefølgen brukeren skrev ingrediensene i (1..n), satt av serveren.
+    sort_order                int NOT NULL,
     CHECK (
         (ingredient_id IS NOT NULL AND unconfirmed_ingredient_id IS NULL) OR
         (ingredient_id IS NULL AND unconfirmed_ingredient_id IS NOT NULL)

@@ -406,3 +406,127 @@ BEGIN
     RETURN v_updated;
 END;
 $$;
+
+-- =========================================================================
+-- recipe (brukereide). Skriving av selve raden og barna (steg, ingredienslinjer) har hver sin funksjon - Persistence kaller dem i
+-- én transaksjon. Endre/slette/favoritt filtrerer på eier og returnerer antall berørte rader (0 = finnes ikke eller ikke din).
+-- =========================================================================
+
+CREATE OR REPLACE FUNCTION insert_recipe(
+    p_id uuid,
+    p_owner_user_id uuid,
+    p_title text,
+    p_description text,
+    p_category_id uuid,
+    p_cook_time_minutes int,
+    p_servings int,
+    p_image_url text,
+    p_image_attribution text,
+    p_is_favorite boolean,
+    p_source_type text,
+    p_source_reference text,
+    p_source_url text,
+    p_source_is_edited_from_source boolean,
+    p_created_at timestamptz,
+    p_updated_at timestamptz
+)
+RETURNS void
+LANGUAGE sql
+AS $$
+    INSERT INTO recipe (id, owner_user_id, title, description, category_id, cook_time_minutes, servings, image_url,
+                        image_attribution, is_favorite, source_type, source_reference, source_url,
+                        source_is_edited_from_source, created_at, updated_at)
+    VALUES (p_id, p_owner_user_id, p_title, p_description, p_category_id, p_cook_time_minutes, p_servings, p_image_url,
+            p_image_attribution, p_is_favorite, p_source_type, p_source_reference, p_source_url,
+            p_source_is_edited_from_source, p_created_at, p_updated_at);
+$$;
+
+-- Endrer ikke eier, kilde-type/-url (låst), favoritt eller opprettelsestidspunkt.
+CREATE OR REPLACE FUNCTION update_recipe(
+    p_id uuid,
+    p_owner_user_id uuid,
+    p_title text,
+    p_description text,
+    p_category_id uuid,
+    p_cook_time_minutes int,
+    p_servings int,
+    p_image_url text,
+    p_image_attribution text,
+    p_source_reference text,
+    p_source_is_edited_from_source boolean,
+    p_updated_at timestamptz
+)
+RETURNS integer
+LANGUAGE sql
+AS $$
+    WITH u AS (
+        UPDATE recipe
+        SET title = p_title,
+            description = p_description,
+            category_id = p_category_id,
+            cook_time_minutes = p_cook_time_minutes,
+            servings = p_servings,
+            image_url = p_image_url,
+            image_attribution = p_image_attribution,
+            source_reference = p_source_reference,
+            source_is_edited_from_source = p_source_is_edited_from_source,
+            updated_at = p_updated_at
+        WHERE id = p_id AND owner_user_id = p_owner_user_id
+        RETURNING 1
+    )
+    SELECT count(*)::integer FROM u;
+$$;
+
+CREATE OR REPLACE FUNCTION set_recipe_favorite(p_id uuid, p_owner_user_id uuid, p_is_favorite boolean)
+RETURNS integer
+LANGUAGE sql
+AS $$
+    WITH u AS (
+        UPDATE recipe SET is_favorite = p_is_favorite WHERE id = p_id AND owner_user_id = p_owner_user_id RETURNING 1
+    )
+    SELECT count(*)::integer FROM u;
+$$;
+
+-- Steg og ingredienslinjer følger med (ON DELETE CASCADE).
+CREATE OR REPLACE FUNCTION delete_recipe(p_id uuid, p_owner_user_id uuid)
+RETURNS integer
+LANGUAGE sql
+AS $$
+    WITH d AS (DELETE FROM recipe WHERE id = p_id AND owner_user_id = p_owner_user_id RETURNING 1)
+    SELECT count(*)::integer FROM d;
+$$;
+
+CREATE OR REPLACE FUNCTION insert_recipe_step(
+    p_id uuid, p_recipe_id uuid, p_step_number int, p_description text, p_timer_minutes int
+)
+RETURNS void
+LANGUAGE sql
+AS $$
+    INSERT INTO recipe_step (id, recipe_id, step_number, description, timer_minutes)
+    VALUES (p_id, p_recipe_id, p_step_number, p_description, p_timer_minutes);
+$$;
+
+CREATE OR REPLACE FUNCTION delete_recipe_steps(p_recipe_id uuid)
+RETURNS void
+LANGUAGE sql
+AS $$
+    DELETE FROM recipe_step WHERE recipe_id = p_recipe_id;
+$$;
+
+CREATE OR REPLACE FUNCTION insert_recipe_ingredient(
+    p_id uuid, p_recipe_id uuid, p_ingredient_id uuid, p_unconfirmed_ingredient_id uuid,
+    p_amount numeric, p_unit_id uuid, p_note text, p_sort_order int
+)
+RETURNS void
+LANGUAGE sql
+AS $$
+    INSERT INTO recipe_ingredient (id, recipe_id, ingredient_id, unconfirmed_ingredient_id, amount, unit_id, note, sort_order)
+    VALUES (p_id, p_recipe_id, p_ingredient_id, p_unconfirmed_ingredient_id, p_amount, p_unit_id, p_note, p_sort_order);
+$$;
+
+CREATE OR REPLACE FUNCTION delete_recipe_ingredients(p_recipe_id uuid)
+RETURNS void
+LANGUAGE sql
+AS $$
+    DELETE FROM recipe_ingredient WHERE recipe_id = p_recipe_id;
+$$;
