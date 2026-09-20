@@ -33,6 +33,6 @@ public abstract class DbWriter<T>(string connectionString) : DbConnection(connec
             throw new DbCommandMissingException<T>(nameof(DeleteCommand));
 
         await using var connection = await OpenConnectionAsync();
-        return await connection.ExecuteAsync(DeleteCommand, new { Id = id });
+        return await connection.ExecuteScalarAsync<int>(DeleteCommand, new { Id = id });
     }
 }

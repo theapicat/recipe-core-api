@@ -2,7 +2,7 @@ namespace Domain.Ingredients;
 
 // Kun én rad per (IngredientId, NutrientDefinitionId) som faktisk er målt - ikke alle
 // ingredienser har verdi for alle næringsstoffer.
-public class IngredientNutrientValue
+public class IngredientNutrientValue : IHasId<Guid>
 {
     public required Guid Id { get; set; }
     public required Guid IngredientId { get; set; }

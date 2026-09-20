@@ -1,7 +1,7 @@
 namespace Domain.Ingredients;
 
-public class SearchKeyword
+public class SearchKeyword : IHasId<Guid>
 {
-    public required Guid Id { get; set; }
+    public Guid Id { get; set; }
     public required string Name { get; set; }
 }

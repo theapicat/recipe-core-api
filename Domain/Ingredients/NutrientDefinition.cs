@@ -1,8 +1,9 @@
 namespace Domain.Ingredients;
 
 // Speiler Matvaretabellens næringsstoff-katalog. Id er kildens egen kode (f.eks. "Fett", "Vit C"),
-// ikke en generert Guid - katalogen importeres derfra, koden er allerede stabil og unik.
-public class NutrientDefinition
+// ikke en generert Guid - katalogen importeres derfra, koden er allerede stabil og unik. Derfor
+// oppgis Id av admin (tildeles ikke av serveren).
+public class NutrientDefinition : IHasId<string>
 {
     public required string Id { get; set; }
     public required string Name { get; set; }

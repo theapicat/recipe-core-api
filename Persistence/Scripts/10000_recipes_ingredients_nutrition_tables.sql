@@ -1,16 +1,18 @@
 -- Feature-gruppe: oppskrifter, ingredienser og næringsinnhold.
--- Rekkefølge: enheter -> ingredienskataloger -> næringsstoffer -> ingrediens -> oppskrifter.
+-- Rekkefølge: enheter -> ingredienskataloger -> næringsstoffer -> ingrediens -> ubekreftet ingrediens -> oppskrifter.
+-- Alle setninger er idempotente (IF NOT EXISTS). Det hindrer feil ved gjenkjøring, men endrer ikke en tabell som
+-- allerede finnes - endringer i eksisterende tabeller etter første utrulling går i 11000-serien.
 
 -- =========================================================================
 -- Enheter
 -- =========================================================================
 
-CREATE TABLE unit_type (
+CREATE TABLE IF NOT EXISTS unit_type (
     id   uuid PRIMARY KEY,
     name text NOT NULL
 );
 
-CREATE TABLE unit (
+CREATE TABLE IF NOT EXISTS unit (
     id              uuid PRIMARY KEY,
     name            text NOT NULL,
     abbreviation    text NOT NULL,
@@ -19,23 +21,23 @@ CREATE TABLE unit (
     base_unit_ratio numeric(12,4) NOT NULL
 );
 
-CREATE INDEX ix_unit_unit_type_id ON unit (unit_type_id);
+CREATE INDEX IF NOT EXISTS ix_unit_unit_type_id ON unit (unit_type_id);
 
 -- =========================================================================
 -- Ingredienskataloger (adminstyrte oppslagstabeller)
 -- =========================================================================
 
-CREATE TABLE ingredient_category (
+CREATE TABLE IF NOT EXISTS ingredient_category (
     id   uuid PRIMARY KEY,
     name text NOT NULL
 );
 
-CREATE TABLE allergen (
+CREATE TABLE IF NOT EXISTS allergen (
     id   uuid PRIMARY KEY,
     name text NOT NULL
 );
 
-CREATE TABLE search_keyword (
+CREATE TABLE IF NOT EXISTS search_keyword (
     id   uuid PRIMARY KEY,
     name text NOT NULL
 );
@@ -44,7 +46,7 @@ CREATE TABLE search_keyword (
 -- Næringsstoffer (speiler Matvaretabellens katalog - id er kildens egen kode)
 -- =========================================================================
 
-CREATE TABLE nutrient_definition (
+CREATE TABLE IF NOT EXISTS nutrient_definition (
     id                text PRIMARY KEY,
     name              text NOT NULL,
     unit              text NOT NULL,
@@ -54,39 +56,42 @@ CREATE TABLE nutrient_definition (
     source_url        text
 );
 
-CREATE INDEX ix_nutrient_definition_parent_id ON nutrient_definition (parent_id);
+CREATE INDEX IF NOT EXISTS ix_nutrient_definition_parent_id ON nutrient_definition (parent_id);
 
 -- =========================================================================
 -- Ingrediens
 -- =========================================================================
 
-CREATE TABLE ingredient (
-    id                   uuid PRIMARY KEY,
-    name                 text NOT NULL,
-    category_id          uuid NOT NULL REFERENCES ingredient_category (id) ON DELETE RESTRICT,
-    primary_unit_type_id uuid NOT NULL REFERENCES unit_type (id) ON DELETE RESTRICT,
-    default_unit_id      uuid NOT NULL REFERENCES unit (id) ON DELETE RESTRICT,
-    energy_kcal          numeric(10,2) NOT NULL,
-    energy_kj            numeric(10,2),
+CREATE TABLE IF NOT EXISTS ingredient (
+    id                      uuid PRIMARY KEY,
+    name                    text NOT NULL,
+    category_id             uuid NOT NULL REFERENCES ingredient_category (id) ON DELETE RESTRICT,
+    primary_unit_type_id    uuid NOT NULL REFERENCES unit_type (id) ON DELETE RESTRICT,
+    default_unit_id         uuid NOT NULL REFERENCES unit (id) ON DELETE RESTRICT,
+    energy_kcal             numeric(10,2) NOT NULL,
+    energy_kj               numeric(10,2),
     -- Andel av matvaren som er spiselig (f.eks. 97 for agurk).
-    edible_part_percent  numeric(5,2),
+    edible_part_percent     numeric(5,2),
     -- Kun satt for offisielt importerte ingredienser - lar brukeren slå opp kilden.
-    source_id            text,
-    source_url           text,
+    source_id               text,
+    source_url              text,
+    -- Satt når ingrediensen er en variant av en annen. Næringsdata kopieres ved opprettelse og følger ikke basen videre.
+    variant_of_ingredient_id uuid REFERENCES ingredient (id) ON DELETE RESTRICT,
     -- false for adminlagte innslag som venter på fullstendige nærings-/allergendata.
-    is_verified          boolean NOT NULL
+    is_verified             boolean NOT NULL
 );
 
-CREATE INDEX ix_ingredient_category_id ON ingredient (category_id);
-CREATE UNIQUE INDEX ux_ingredient_source_id ON ingredient (source_id) WHERE source_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_ingredient_category_id ON ingredient (category_id);
+CREATE INDEX IF NOT EXISTS ix_ingredient_variant_of_ingredient_id ON ingredient (variant_of_ingredient_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ingredient_source_id ON ingredient (source_id) WHERE source_id IS NOT NULL;
 
-CREATE TABLE ingredient_allergen (
+CREATE TABLE IF NOT EXISTS ingredient_allergen (
     ingredient_id uuid NOT NULL REFERENCES ingredient (id) ON DELETE CASCADE,
     allergen_id   uuid NOT NULL REFERENCES allergen (id) ON DELETE RESTRICT,
     PRIMARY KEY (ingredient_id, allergen_id)
 );
 
-CREATE TABLE ingredient_search_keyword (
+CREATE TABLE IF NOT EXISTS ingredient_search_keyword (
     ingredient_id     uuid NOT NULL REFERENCES ingredient (id) ON DELETE CASCADE,
     search_keyword_id uuid NOT NULL REFERENCES search_keyword (id) ON DELETE RESTRICT,
     PRIMARY KEY (ingredient_id, search_keyword_id)
@@ -94,7 +99,7 @@ CREATE TABLE ingredient_search_keyword (
 
 -- Kun én rad per (ingredient_id, nutrient_definition_id) som faktisk er målt -
 -- ikke alle ingredienser har verdi for alle næringsstoffer.
-CREATE TABLE ingredient_nutrient_value (
+CREATE TABLE IF NOT EXISTS ingredient_nutrient_value (
     id                     uuid PRIMARY KEY,
     ingredient_id          uuid NOT NULL REFERENCES ingredient (id) ON DELETE CASCADE,
     nutrient_definition_id text NOT NULL REFERENCES nutrient_definition (id) ON DELETE RESTRICT,
@@ -104,40 +109,50 @@ CREATE TABLE ingredient_nutrient_value (
     UNIQUE (ingredient_id, nutrient_definition_id)
 );
 
-CREATE INDEX ix_ingredient_nutrient_value_nutrient_definition_id ON ingredient_nutrient_value (nutrient_definition_id);
+CREATE INDEX IF NOT EXISTS ix_ingredient_nutrient_value_nutrient_definition_id ON ingredient_nutrient_value (nutrient_definition_id);
 
 -- Enhet -> gram-konvertering per ingrediens (speiler Matvaretabellens "portions"-data).
-CREATE TABLE ingredient_portion (
+CREATE TABLE IF NOT EXISTS ingredient_portion (
     id                uuid PRIMARY KEY,
     ingredient_id     uuid NOT NULL REFERENCES ingredient (id) ON DELETE CASCADE,
     unit_id           uuid NOT NULL REFERENCES unit (id) ON DELETE RESTRICT,
     grams_per_portion numeric(10,2) NOT NULL
 );
 
-CREATE INDEX ix_ingredient_portion_ingredient_id ON ingredient_portion (ingredient_id);
+CREATE INDEX IF NOT EXISTS ix_ingredient_portion_ingredient_id ON ingredient_portion (ingredient_id);
 
 -- Brukeroppgitt ingrediens som ikke finnes i den offisielle katalogen ennå.
 -- created_by_user_id har ingen FK - brukeridentitet eies av en annen tjeneste/database.
-CREATE TABLE unconfirmed_ingredient (
-    id                    uuid PRIMARY KEY,
-    name                  text NOT NULL,
-    created_by_user_id    uuid NOT NULL,
-    request_official_data boolean NOT NULL,
-    created_at            timestamptz NOT NULL
+-- Raden beholdes etter avgjørelse (Approved/Merged/Rejected) som historikk brukeren kan se.
+CREATE TABLE IF NOT EXISTS unconfirmed_ingredient (
+    id                     uuid PRIMARY KEY,
+    name                   text NOT NULL,
+    created_by_user_id     uuid NOT NULL,
+    review_status          text NOT NULL DEFAULT 'NotRequested'
+                           CHECK (review_status IN ('NotRequested', 'Pending', 'Approved', 'Merged', 'Rejected')),
+    rejection_reason       text,
+    reviewed_at            timestamptz,
+    -- Den offisielle ingrediensen dette endte som - satt hvis og bare hvis status er Approved eller Merged.
+    resolved_ingredient_id uuid REFERENCES ingredient (id) ON DELETE RESTRICT,
+    created_at             timestamptz NOT NULL,
+    CHECK ((review_status IN ('Approved', 'Merged')) = (resolved_ingredient_id IS NOT NULL))
 );
+
+CREATE INDEX IF NOT EXISTS ix_unconfirmed_ingredient_created_by_user_id ON unconfirmed_ingredient (created_by_user_id);
+CREATE INDEX IF NOT EXISTS ix_unconfirmed_ingredient_pending ON unconfirmed_ingredient (created_at) WHERE review_status = 'Pending';
 
 -- =========================================================================
 -- Oppskrifter
 -- =========================================================================
 
-CREATE TABLE recipe_category (
+CREATE TABLE IF NOT EXISTS recipe_category (
     id   uuid PRIMARY KEY,
     name text NOT NULL
 );
 
 -- owner_user_id har ingen FK - brukeridentitet eies av en annen tjeneste/database.
 -- RecipeSource er flatet ut som kolonner - alltid tilstede, ikke egen tabell.
-CREATE TABLE recipe (
+CREATE TABLE IF NOT EXISTS recipe (
     id                            uuid PRIMARY KEY,
     owner_user_id                 uuid NOT NULL,
     title                         text NOT NULL,
@@ -158,10 +173,10 @@ CREATE TABLE recipe (
     updated_at                    timestamptz NOT NULL
 );
 
-CREATE INDEX ix_recipe_owner_user_id ON recipe (owner_user_id);
-CREATE INDEX ix_recipe_category_id ON recipe (category_id);
+CREATE INDEX IF NOT EXISTS ix_recipe_owner_user_id ON recipe (owner_user_id);
+CREATE INDEX IF NOT EXISTS ix_recipe_category_id ON recipe (category_id);
 
-CREATE TABLE recipe_step (
+CREATE TABLE IF NOT EXISTS recipe_step (
     id            uuid PRIMARY KEY,
     recipe_id     uuid NOT NULL REFERENCES recipe (id) ON DELETE CASCADE,
     step_number   int NOT NULL,
@@ -171,7 +186,7 @@ CREATE TABLE recipe_step (
 );
 
 -- Peker på nøyaktig én av ingredient_id eller unconfirmed_ingredient_id, aldri begge/ingen.
-CREATE TABLE recipe_ingredient (
+CREATE TABLE IF NOT EXISTS recipe_ingredient (
     id                        uuid PRIMARY KEY,
     recipe_id                 uuid NOT NULL REFERENCES recipe (id) ON DELETE CASCADE,
     ingredient_id             uuid REFERENCES ingredient (id) ON DELETE RESTRICT,
@@ -185,5 +200,6 @@ CREATE TABLE recipe_ingredient (
     )
 );
 
-CREATE INDEX ix_recipe_ingredient_recipe_id ON recipe_ingredient (recipe_id);
-CREATE INDEX ix_recipe_ingredient_ingredient_id ON recipe_ingredient (ingredient_id);
+CREATE INDEX IF NOT EXISTS ix_recipe_ingredient_recipe_id ON recipe_ingredient (recipe_id);
+CREATE INDEX IF NOT EXISTS ix_recipe_ingredient_ingredient_id ON recipe_ingredient (ingredient_id);
+CREATE INDEX IF NOT EXISTS ix_recipe_ingredient_unconfirmed_ingredient_id ON recipe_ingredient (unconfirmed_ingredient_id);

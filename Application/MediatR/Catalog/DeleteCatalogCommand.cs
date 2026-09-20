@@ -2,4 +2,4 @@ using MediatR;
 
 namespace Application.MediatR.Catalog;
 
-public record DeleteCatalogCommand<T>(Guid Id) : IRequest<bool>;
+public record DeleteCatalogCommand<T, TKey>(TKey Id) : IRequest<bool>;

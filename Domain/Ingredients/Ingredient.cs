@@ -1,6 +1,6 @@
 namespace Domain.Ingredients;
 
-public class Ingredient
+public class Ingredient : IHasId<Guid>
 {
     public required Guid Id { get; set; }
     public required string Name { get; set; }
@@ -19,6 +19,10 @@ public class Ingredient
     // Kun satt for offisielt importerte ingredienser - lar brukeren slå opp kilden.
     public string? SourceId { get; set; }
     public string? SourceUrl { get; set; }
+
+    // Satt når ingrediensen er en variant av en annen (f.eks. en spesiell gulrotsort). Næringsdata er
+    // kopiert fra basisingrediensen ved opprettelse og følger den ikke videre - næringsverdier er veiledende.
+    public Guid? VariantOfIngredientId { get; set; }
 
     public required List<IngredientNutrientValue> NutrientValues { get; set; }
     public required List<IngredientPortion> Portions { get; set; }

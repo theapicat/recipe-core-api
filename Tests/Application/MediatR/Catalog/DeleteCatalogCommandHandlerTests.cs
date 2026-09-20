@@ -21,9 +21,9 @@ public class DeleteCatalogCommandHandlerTests
     {
         var writer = new FakeWriter(affectedRows);
         var cache = Substitute.For<ICacheService>();
-        var handler = new DeleteCatalogCommandHandler<IngredientCategory>(writer, cache);
+        var handler = new DeleteCatalogCommandHandler<IngredientCategory, Guid>(writer, cache);
 
-        var result = await handler.Handle(new DeleteCatalogCommand<IngredientCategory>(Guid.NewGuid()), CancellationToken.None);
+        var result = await handler.Handle(new DeleteCatalogCommand<IngredientCategory, Guid>(Guid.NewGuid()), CancellationToken.None);
 
         Assert.Equal(expected, result);
         cache.Received(1).Remove(Arg.Any<string>());

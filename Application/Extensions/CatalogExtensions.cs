@@ -10,17 +10,19 @@ namespace Application.Extensions;
 
 public static class CatalogExtensions
 {
-    // Alle katalogmodeller som bruker den generiske CQRS-malen i Application.MediatR.Catalog.
-    // Legg til nye katalogtyper her etter hvert som de får en tilsvarende Reader/Writer i Persistence.
+    // Katalogmodeller med full CRUD (lesing med cache + skriving) via den generiske CQRS-malen i
+    // Application.MediatR.Catalog, sammen med nøkkeltypen. Legg til nye katalogtyper her etter hvert som de får
+    // en tilsvarende Reader/Writer i Persistence.
     // Domain.Units.Unit/UnitType er alias-et siden "Unit" ellers kolliderer med MediatR.Unit.
-    private static readonly Type[] CatalogTypes =
+    private static readonly (Type Entity, Type Key)[] CatalogTypes =
     [
-        typeof(IngredientCategory),
-        typeof(Allergen),
-        typeof(SearchKeyword),
-        typeof(DomainUnitType),
-        typeof(DomainUnit),
-        typeof(RecipeCategory)
+        (typeof(IngredientCategory), typeof(Guid)),
+        (typeof(Allergen), typeof(Guid)),
+        (typeof(SearchKeyword), typeof(Guid)),
+        (typeof(DomainUnitType), typeof(Guid)),
+        (typeof(DomainUnit), typeof(Guid)),
+        (typeof(RecipeCategory), typeof(Guid)),
+        (typeof(NutrientDefinition), typeof(string))
     ];
 
     // MediatR sin assembly-scanning registrerer ikke ekte åpne generiske handlers der TRequest og
@@ -29,39 +31,55 @@ public static class CatalogExtensions
     // her, én gang per katalogtype, i stedet for én håndskrevet handler-klasse per modell.
     public static IServiceCollection AddCatalogHandlers(this IServiceCollection services)
     {
-        foreach (var entityType in CatalogTypes)
+        foreach (var (entity, key) in CatalogTypes)
         {
-            services.AddScoped(
-                typeof(IRequestHandler<,>).MakeGenericType(
-                    typeof(GetAllCatalogQuery<>).MakeGenericType(entityType),
-                    typeof(List<>).MakeGenericType(entityType)),
-                typeof(GetAllCatalogQueryHandler<>).MakeGenericType(entityType));
-
-            services.AddScoped(
-                typeof(IRequestHandler<,>).MakeGenericType(
-                    typeof(GetCatalogByIdQuery<>).MakeGenericType(entityType),
-                    entityType),
-                typeof(GetCatalogByIdQueryHandler<>).MakeGenericType(entityType));
-
-            services.AddScoped(
-                typeof(IRequestHandler<,>).MakeGenericType(
-                    typeof(InsertCatalogCommand<>).MakeGenericType(entityType),
-                    typeof(bool)),
-                typeof(InsertCatalogCommandHandler<>).MakeGenericType(entityType));
-
-            services.AddScoped(
-                typeof(IRequestHandler<,>).MakeGenericType(
-                    typeof(UpdateCatalogCommand<>).MakeGenericType(entityType),
-                    typeof(bool)),
-                typeof(UpdateCatalogCommandHandler<>).MakeGenericType(entityType));
-
-            services.AddScoped(
-                typeof(IRequestHandler<,>).MakeGenericType(
-                    typeof(DeleteCatalogCommand<>).MakeGenericType(entityType),
-                    typeof(bool)),
-                typeof(DeleteCatalogCommandHandler<>).MakeGenericType(entityType));
+            AddGetAll(services, entity);
+            AddGetById(services, entity, key);
+            AddInsert(services, entity, key);
+            AddUpdate(services, entity);
+            AddDelete(services, entity, key);
         }
+
+        // Ingredienser skrives via egne kommandoer (DTO, transaksjon, cache-invalidering av lista), men
+        // lesing gjenbruker malen: lista (lettvekts-projeksjon, cachet) og enkeltoppslag av den fulle modellen.
+        AddGetAll(services, typeof(IngredientListItem));
+        AddGetById(services, typeof(Ingredient), typeof(Guid));
 
         return services;
     }
+
+    private static void AddGetAll(IServiceCollection services, Type entity) =>
+        services.AddScoped(
+            typeof(IRequestHandler<,>).MakeGenericType(
+                typeof(GetAllCatalogQuery<>).MakeGenericType(entity),
+                typeof(List<>).MakeGenericType(entity)),
+            typeof(GetAllCatalogQueryHandler<>).MakeGenericType(entity));
+
+    private static void AddGetById(IServiceCollection services, Type entity, Type key) =>
+        services.AddScoped(
+            typeof(IRequestHandler<,>).MakeGenericType(
+                typeof(GetCatalogByIdQuery<,>).MakeGenericType(entity, key),
+                entity),
+            typeof(GetCatalogByIdQueryHandler<,>).MakeGenericType(entity, key));
+
+    private static void AddInsert(IServiceCollection services, Type entity, Type key) =>
+        services.AddScoped(
+            typeof(IRequestHandler<,>).MakeGenericType(
+                typeof(InsertCatalogCommand<,>).MakeGenericType(entity, key),
+                key),
+            typeof(InsertCatalogCommandHandler<,>).MakeGenericType(entity, key));
+
+    private static void AddUpdate(IServiceCollection services, Type entity) =>
+        services.AddScoped(
+            typeof(IRequestHandler<,>).MakeGenericType(
+                typeof(UpdateCatalogCommand<>).MakeGenericType(entity),
+                typeof(bool)),
+            typeof(UpdateCatalogCommandHandler<>).MakeGenericType(entity));
+
+    private static void AddDelete(IServiceCollection services, Type entity, Type key) =>
+        services.AddScoped(
+            typeof(IRequestHandler<,>).MakeGenericType(
+                typeof(DeleteCatalogCommand<,>).MakeGenericType(entity, key),
+                typeof(bool)),
+            typeof(DeleteCatalogCommandHandler<,>).MakeGenericType(entity, key));
 }

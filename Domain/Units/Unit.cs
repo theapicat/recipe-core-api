@@ -1,8 +1,8 @@
 namespace Domain.Units;
 
-public class Unit
+public class Unit : IHasId<Guid>
 {
-    public required Guid Id { get; set; }
+    public Guid Id { get; set; }
     public required string Name { get; set; }
     public required string Abbreviation { get; set; }
     public required Guid UnitTypeId { get; set; }

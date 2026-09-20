@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `recipe-core-api` is the core backend service of the Recipe platform: recipes, ingredients/nutrition,
 meal planning, and user data. It sits behind a YARP gateway and talks to sibling microservices
 (`recipe-scraper-service`, `recipe-notification-service`) over RabbitMQ, not direct HTTP calls. This repo
-is early-stage: the domain model, the six admin-managed catalog models (full CRUD, cached reads), and JWT
-auth are built end-to-end; recipes, meal planning, and shopping lists are not started (see
+is early-stage: the domain model, all catalog models (catalogs, nutrient definitions, ingredients, and users'
+unconfirmed-ingredient requests) and JWT auth are built end-to-end; recipes, meal planning, and shopping lists are not started (see
 `RECIPE_BACKEND_NOTES.md` for the domain model's design rationale, and `Documentation/` for everything
 else — start with `Documentation/01-architecture-and-setup.md`).
 
@@ -18,7 +18,7 @@ else — start with `Documentation/01-architecture-and-setup.md`).
 dotnet build                          # build the whole solution
 dotnet run --project API              # run the API (http://localhost:5002, see API/Properties/launchSettings.json)
 dotnet watch --project API run        # run with hot reload
-dotnet test Tests/Tests.csproj        # run unit tests (34 tests, no external dependencies needed)
+dotnet test Tests/Tests.csproj        # run unit tests (111 tests, no external dependencies needed)
 ```
 
 Local dependencies (Postgres, RabbitMQ, Seq) are expected to run externally (e.g. via the platform's
@@ -60,7 +60,7 @@ API  →  Application  →  Persistence  →  Domain
 Controller → `IMediator.Send(command/query)` → Application handler → Persistence Reader/Writer for
 reads/writes, and/or `IEventPublisher.PublishAsync(...)` (wraps MassTransit) to emit an event onto
 RabbitMQ for another service to consume. See `Application/MediatR/Public/ContactForm/` for the
-hand-written reference pattern, and `Application/MediatR/Catalog/` for the generic pattern used by the six
+hand-written reference pattern, and `Application/MediatR/Catalog/` for the generic pattern used by the
 admin-managed catalog models.
 
 ### Controller convention
@@ -68,8 +68,8 @@ admin-managed catalog models.
 Three access-tier base classes carry route prefix + auth attribute: `PublicController` (`/api/public`,
 `[AllowAnonymous]`, rare — most of the app requires a signed-in user), `UserController` (`/api/user`,
 `[Authorize]`), `AdminController` (`/api/admin`, `[Authorize(Roles = "admin")]`). Concrete controllers for
-the six catalog models instead inherit from the generic `ReadCatalogController<T>`/
-`ReadWriteCatalogController<T>` (C# only allows one base class, and the CQRS-shape axis and the
+the simple catalog models instead inherit from the generic `ReadCatalogController<T, TKey>`/
+`ReadWriteCatalogController<T, TKey>` (C# only allows one base class, and the CQRS-shape axis and the
 access-tier axis both want that slot) and apply `[Route]`/`[Authorize(...)]` directly. Full details incl.
 the complete endpoint table: `Documentation/02-endpoints-and-controllers.md`.
 
@@ -77,15 +77,8 @@ the complete endpoint table: `Documentation/02-endpoints-and-controllers.md`.
 `Documentation/05-authentication-and-authorization.md`** (implemented state) and the "Autentisering og
 autorisering" section of `RECIPE_BACKEND_NOTES.md` (full rationale). Core API validates the JWT itself,
 never trusts `X-User-Id`/`X-User-Roles`, reads the user id from `ClaimTypes.NameIdentifier` (not `"sub"`),
-and uses lowercase roles (`admin`/`user`). `Jwt:Key` in `appsettings.Development.json` is currently empty
-— the app throws at startup until it's filled in with the real shared dev key.
-
-### Domain namespace vs. folder layout
-
-Domain classes physically live under `Domain/<Area>/` (matching the `Domain` project structure), but their
-`namespace` is still the placeholder `RecipeCoreApi.Domain.Models.<Area>` inherited from the design draft
-described in `RECIPE_BACKEND_NOTES.md`. This mismatch is known, pre-existing debt, not a mistake to "fix"
-incidentally while touching unrelated code — rename deliberately if asked to.
+and uses lowercase roles (`admin`/`user`). `Jwt:Key`/`Issuer`/`Audience` must match the gateway and auth-api;
+the app throws at startup if any is missing.
 
 ### Domain model notes (see `RECIPE_BACKEND_NOTES.md` for full rationale)
 
@@ -101,6 +94,11 @@ incidentally while touching unrelated code — rename deliberately if asked to.
   a user can't find an ingredient in search.
 - Admin-managed lookup catalogs (`RecipeCategory`, `IngredientCategory`, `Allergen`, `UnitType`,
   `SearchKeyword`) all share a simple `{Id, Name}` shape.
+- Ids are always assigned by the server (`Guid.CreateVersion7()`, via `IHasId<TKey>`) and returned by every create
+  (`201` + `Location`); `NutrientDefinition` is the exception (Matvaretabellen's text code, supplied by admin).
+- `UnconfirmedIngredient` has a review lifecycle (`NotRequested → Pending → Approved | Merged | Rejected`); approve
+  can create the ingredient as a variant (`Ingredient.VariantOfIngredientId`) of another. See
+  `Documentation/02-endpoints-and-controllers.md` §5.
 - `Recipe.CookTimeMinutes` is a single total field — the sum of `RecipeStep.TimerMinutes` across steps
   that have a timer, not separate prep/cook fields.
 
@@ -113,13 +111,14 @@ incidentally while touching unrelated code — rename deliberately if asked to.
 - Microsoft.AspNetCore.Authentication.JwtBearer for auth (`API/Extensions/JwtAuthenticationExtensions.cs`) —
   Core API validates the JWT itself, doesn't just trust the gateway.
 - Dapper + Npgsql for data access, `dbup-postgresql` for migrations (numbered scripts in
-  `Persistence/Scripts/`, convention documented in `Documentation/06-persistence-and-data-access.md`).
+  `Persistence/Scripts/`: `10000` tables, `20000` queries, `30000` commands, `11000/21000/31000` for changes —
+  convention, idempotency rules and the freeze point are in `Documentation/06-persistence-and-data-access.md`).
 - SignalR for realtime push — wired (`Application/Realtime/RecipeHub.cs`, `/hubs/recipe`) but the hub has
   no methods yet, built ahead of need as a placeholder.
 - Serilog (Console + Seq sinks) for structured logging, configured via `API/Extensions/SerilogsExtensions.cs`
   and the `Serilog` section in appsettings.
 - xUnit + NSubstitute for testing (`Tests/`) — not FluentAssertions, its v8+ license requires payment for
-  commercial use.
+  commercial use. Unit tests cover class functionality only; endpoint/edge-case tests live in the user's separate suite.
 
 ## Documentation
 

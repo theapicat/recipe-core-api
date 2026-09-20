@@ -2,18 +2,26 @@
 
 ---
 
-Per 2026-09-19. Sjekk mot faktisk kode ved tvil.
+Per 2026-09-20. Sjekk mot faktisk kode ved tvil.
 
 ## 1. Prinsipp
 
 Dapper mot Postgres via Npgsql — ingen EF Core. Alle spørringer/kommandoer er Postgres-funksjoner
-(`CREATE FUNCTION`), aldri rå SQL bygget i C#. `Persistence`-prosjektet inneholder kun de generiske
-malklassene og de konkrete klassene som kobler en modell til navnet på funksjonene den bruker; selve
-SQL-en ligger i migreringsskript (§3), ikke i C#-strenger utover funksjonsnavn og parameterrekkefølge.
+(`CREATE FUNCTION`), aldri rå SQL bygget i C#. `Persistence`-prosjektet inneholder de generiske malklassene og de
+konkrete klassene som kobler en modell til navnet på funksjonene den bruker; selve SQL-en ligger i migreringsskript
+(§3).
 
-Dapper er konfigurert til å matche snake_case-kolonner mot PascalCase C#-egenskaper automatisk
-(`DefaultTypeMap.MatchNamesWithUnderscores = true`, satt i `PersistenceExtensions.AddPersistenceServices`)
-— ingen kolonne-alias trengs i noen spørring.
+Dapper-oppsett (satt i `PersistenceExtensions.AddPersistenceServices`):
+
+- `DefaultTypeMap.MatchNamesWithUnderscores = true` — snake_case-kolonner matches mot PascalCase-egenskaper
+  (`owner_user_id` → `OwnerUserId`) uten alias. Egenskapsnavnet må derfor tilsvare kolonnenavnet
+  (`review_status` → `ReviewStatus`, ikke `Status`).
+- `DateTimeOffsetTypeHandler` — Npgsql leverer `timestamptz` som `DateTime`, og Dapper konverterer ikke selv til
+  `DateTimeOffset`. Skriving sender alltid UTC (Npgsql avviser andre offsets).
+- **Enum sendes som tekst.** Dapper sender ellers enum som heltall, som feiler mot en `text`-kolonne med `CHECK`. Lesing
+  fra tekst til enum fungerer direkte; ved skriving sendes `.ToString()` eksplisitt (se `UnconfirmedIngredientWriter`).
+- `uuid[]` leveres som `Guid[]` — modeller som leses direkte fra en array-kolonne bruker `Guid[]`, ikke `List<Guid>`
+  (`IngredientListItem`).
 
 ---
 
@@ -23,13 +31,13 @@ Dapper er konfigurert til å matche snake_case-kolonner mot PascalCase C#-egensk
 
 - `DbConnection(string connectionString)` — abstrakt basisklasse, åpner en `NpgsqlConnection`.
 - `DbReader<T>` — abstrakt, virtuelle `GetAllQuery`/`GetByIdQuery`-strenger (null som standard), generiske
-  `GetAllAsync()`/`GetByIdAsync<TId>(id)`. Kaster `DbQueryMissingException<T>` hvis en query ikke er
-  overstyrt.
+  `GetAllAsync()`/`GetByIdAsync<TId>(id)`. Kaster `DbQueryMissingException<T>` hvis en query ikke er overstyrt.
 - `DbWriter<T>` — samme mønster for `InsertCommand`/`UpdateCommand`/`DeleteCommand`, kaster
-  `DbCommandMissingException<T>` ved manglende overstyring.
+  `DbCommandMissingException<T>`. `DeleteAsync` returnerer **antall slettede rader**: `delete_*`-funksjonene returnerer
+  `integer`, og malen leser det som skalar (et `SELECT` gir ikke pålitelig «rader berørt» via `ExecuteAsync`).
 
-Hver modell får sitt eget par i `Persistence/Implementation/` — kun overstyring av query/command-strenger,
-ingen annen logikk:
+Hver modell får sitt eget par i `Persistence/Implementation/` — for de enkle katalogene kun overstyring av
+query/command-strenger, ingen annen logikk:
 
 ```csharp
 public class AllergenReader(IConfiguration configuration)
@@ -40,65 +48,82 @@ public class AllergenReader(IConfiguration configuration)
 }
 ```
 
-Ingen `Interfaces/`-fil per modell med mindre en spesifikk modell trenger en metode utover det
-`DbReader<T>`/`DbWriter<T>` allerede gir (ingen av de seks katalogmodellene gjør det per denne datoen).
+Registrert i DI mot malen (`DbReader<Allergen>` → `AllergenReader`), ikke et eget grensesnitt. Et grensesnitt per modell
+finnes **bare** når modellen trenger metoder utover malen.
 
-Bygget så langt: `IngredientCategoryReader`/`Writer`, `AllergenReader`/`Writer`,
-`SearchKeywordReader`/`Writer`, `UnitTypeReader`/`Writer`, `UnitReader`/`Writer`,
-`RecipeCategoryReader`/`Writer`. Registrert i DI via `PersistenceExtensions.AddPersistenceServices()`, mot
-den åpne generiske typen (`DbReader<Allergen>` → `AllergenReader`), ikke et eget grensesnitt.
+### Modeller som går utover malen
+
+- **`Ingredient`** — `IngredientReader` overstyrer `GetByIdAsync` og henter raden og alle barn (allergener, nøkkelord,
+  næringsverdier, porsjoner) i ett `QueryMultiple`-kall. `IngredientWriter` overstyrer `AddAsync`/`UpdateAsync` slik at
+  ingrediensen og barna skrives i **én transaksjon** (malen åpner ellers ny forbindelse per kall). Oppdatering
+  erstatter barna (slett + sett inn). Delt SQL-logikk ligger i `IngredientPersistence` (internal).
+- **`IngredientListItem`** — `IngredientListItemReader`, kun `GetAll` (lettvekts-liste til cachen).
+- **`UnconfirmedIngredient`** — egne grensesnitt i `Persistence/Interfaces/` (`IUnconfirmedIngredientReader`/
+  `Writer`) siden den trenger spørringer per bruker/status, telling til grenser og statusendringer. Endrende metoder
+  returnerer `bool` (`false` = ingen rad matchet vilkåret: finnes ikke, feil eier eller feil status). `ResolveAsync`
+  oppretter evt. en ny ingrediens, avgjør forespørselen og flytter oppskriftslinjer i én transaksjon.
+- **`NutrientDefinition`** — vanlig mal, men med `string`-nøkkel.
 
 ---
 
 ## 3. Migreringsskript (`Persistence/Scripts/`)
 
-Kjøres av DbUp (`Persistence/Extensions/DatabaseMigrationExtensions.cs`, `MigrateDatabase`), kalt fra
-`Program.cs` før noe annet. Filene er embedded resources, oppdaget og sortert alfabetisk på fullt
-ressursnavn av DbUp.
+Kjøres av DbUp (`Persistence/Extensions/DatabaseMigrationExtensions.cs`, `MigrateDatabase`), kalt fra `Program.cs`
+før noe annet. Filene er embedded resources, sortert alfabetisk på fullt ressursnavn (tall før bokstaver).
+DbUp kjører hvert skript **én gang** og journalfører navnet i `schemaversions`.
 
 ### Nummereringskonvensjon
 
 | Område | Nummerserie | Innhold |
 | --- | --- | --- |
-| Databasekonfigurasjon | `00000`–`00999` | Extensions, roller, skjema. Sjeldent brukt — ingen skript her ennå siden ID-er genereres i applikasjonslaget (UUIDv7), ikke av Postgres. |
-| Opprette tabeller | `10000`+ | Én fil per feature-gruppe (ikke per tabell). `10000` = oppskrifter/ingredienser/næring. |
-| Endre tabeller | `11000`+ | Løper uavhengig av `10000`-serien, økes for hver faktiske endring. |
-| Opprette prosedyrer/funksjoner | `20000`+ | Suffiks-parer med tilhørende `10000`-fil (`20000` hører til `10000`). |
-| Endre prosedyrer | `21000`+ | Parallelt med `11000`. |
-| Seed-data | `Persistence/Scripts/SeedData/seed_<beskrivelse>.sql` | Ikke tallprefiks — undermappen sorterer uansett etter alle numeriske skript siden tall < bokstaver i DbUp sin alfabetiske sortering. Ingen seed-skript finnes ennå. |
+| Databasekonfigurasjon | `00000`–`09999` | Extensions, roller, skjema. Sjeldent — ingen skript ennå (id-er genereres i applikasjonen). |
+| Opprette tabeller | `10000`–`10999` | Én fil per feature-gruppe (ikke per tabell). `10000` = oppskrifter/ingredienser/næring. |
+| Endre tabeller | `11000`–`19999` | Én fil per endring, økes fortløpende. |
+| Spørringer (lesing) | `20000`–`20999` | `SELECT`-funksjoner. Suffiks-parer med tilhørende `10000`-fil. |
+| Endre spørringer | `21000`–`29999` | |
+| Kommandoer (skriving) | `30000`–`30999` | `INSERT`/`UPDATE`/`DELETE`-funksjoner. |
+| Endre kommandoer | `31000`–`39999` | |
+| Seed-data | `Persistence/Scripts/SeedData/seed_<beskrivelse>.sql` | Ikke tallprefiks — undermappen sorterer etter alle numeriske skript. Ingen seed-skript ennå (kommer etter at katalogene er ferdige). |
 
-Bygget så langt:
+Hver kategori har 1000 plasser til «opprett» og 9000 til «endre» — mer enn nok, siden endringer er langt hyppigere enn
+nye feature-grupper.
 
-- `10000_recipes_ingredients_nutrition_tables.sql` — alle tabeller for enheter, ingredienskataloger,
-  næringsstoffdefinisjon, `ingredient`, og oppskrift-tabellene (`recipe`, `recipe_step`,
-  `recipe_ingredient`, `recipe_category`).
-- `20000_recipes_ingredients_nutrition_procedures.sql` — 30 funksjoner (5 hver) for de seks enkle
-  katalogene: `get_all_<tabell>()`, `get_<tabell>_by_id(p_id)`, `insert_<tabell>(...)`,
-  `update_<tabell>(...)`, `delete_<tabell>(p_id)`. Alle read-funksjoner returnerer `SETOF <tabell>` —
-  Postgres oppretter automatisk en rad-type per tabell, så `get_all` (mange rader) og `get_by_id` (0/1
-  rad) kan dele samme returform.
+Bygget så langt (alle for feature-gruppen oppskrifter/ingredienser/næring):
 
-**⚠️ Planlagt — ikke bygget:** prosedyrer for `nutrient_definition` (hierarki), `ingredient` (tung modell
-med næringsverdier/porsjoner/allergen-koblinger — parameterisert `search`-funksjon ble vurdert, men droppet
-til fordel for full cache + LINQ-filtrering i `Application`, se
-[`03-cqrs-and-mediatr.md`](03-cqrs-and-mediatr.md)), og `unconfirmed_ingredient`.
+- `10000_recipes_ingredients_nutrition_tables.sql` — alle tabeller (enheter, ingredienskataloger,
+  næringsstoffer, `ingredient` med barn, `unconfirmed_ingredient`, oppskrifter).
+- `20000_recipes_ingredients_nutrition_queries.sql` — `get_all_*`/`get_*_by_id` for alle katalogtyper og
+  ingrediens (inkl. `get_all_ingredient_list_item` med `array_agg`-kolonner og barnefunksjonene), samt per bruker/
+  status/telling for ubekreftede ingredienser. Read-funksjonene returnerer `SETOF <tabell>` (Postgres lager en
+  rad-type per tabell).
+- `30000_recipes_ingredients_nutrition_commands.sql` — `insert_*`/`update_*`/`delete_*` for alle katalogtyper og
+  ingrediens (raden + barnefunksjoner), og statusfunksjonene for ubekreftede ingredienser
+  (`request_…_review`, `reject_…`, `resolve_…`). `delete_*` og statusfunksjonene returnerer antall berørte rader.
+
+### Idempotente skript og frysepunkt
+
+Alle setninger er idempotente: `CREATE TABLE/INDEX IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`. Det hindrer feil ved
+gjenkjøring, men **endrer ikke et objekt som allerede finnes** (en eksisterende tabell får ikke nye kolonner av
+`IF NOT EXISTS`, og `CREATE OR REPLACE` kan ikke endre returtype).
+
+**Frysepunkt:** så lenge ingen database utenfor en utvikler sin maskin finnes, redigeres `10000`/`20000`/`30000` på
+stedet og dev-databasen tilbakestilles (`DROP SCHEMA public CASCADE; CREATE SCHEMA public;` — husk at det også fjerner
+`uuid-ossp`-utvidelsen infrastruktur-oppsettet legger inn, som må opprettes på nytt). Fra den første utrullingen
+(staging/produksjon) er de tre filene **skrivebeskyttet**, og alle endringer går i `11000`/`21000`/`31000`-seriene.
 
 ### Primærnøkler
 
-Alle genererte ID-er er `uuid`-kolonner, generert i applikasjonslaget med `Guid.CreateVersion7()` (ikke
-`Guid.NewGuid()`) for bedre indekslokalitet — Postgres er heap-organisert (ikke klustret på primærnøkkel
-som MySQL/InnoDB), så tilfeldig UUID-rekkefølge er langt mindre kostbart her enn i et tidligere
-MySQL-prosjekt der dette ga reelle ytelsesproblemer. `NutrientDefinition.Id` er unntaket — en `text`-kolonne
-som speiler Matvaretabellens egen stabile kode, ikke en generert `Guid` (se `RECIPE_BACKEND_NOTES.md`).
+Alle genererte ID-er er `uuid`-kolonner, generert i applikasjonslaget med `Guid.CreateVersion7()` (ikke `Guid.NewGuid()`)
+for bedre indekslokalitet — Postgres er heap-organisert, så tilfeldig UUID-rekkefølge er langt mindre kostbart her enn i
+et tidligere MySQL-prosjekt. `NutrientDefinition.Id` er unntaket: en `text`-kolonne som speiler Matvaretabellens
+stabile kode.
 
 ---
 
 ## 4. Tilkoblingsstreng
 
-`ConnectionStrings:DefaultConnection` i appsettings — `localhost:5433` i dev
-(`appsettings.Development.json`), Docker-tjenestenavn `recipe-core-db:5432` i container-/produksjonsoppsett
-(`appsettings.json`). Ingen hemmeligheter i disse filene utover dev-passord som allerede er ment å være
-lokale.
+`ConnectionStrings:DefaultConnection` i appsettings — `localhost:5433` i dev (`appsettings.Development.json`),
+Docker-tjenestenavn `recipe-core-db:5432` i container-/produksjonsoppsett (`appsettings.json`).
 
 ---
 

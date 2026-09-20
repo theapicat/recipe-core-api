@@ -20,6 +20,8 @@ public static class ApplicationExtensions
             config.RegisterServicesFromAssemblyContaining<ApplicationMarker>();
         });
 
+        services.AddSingleton(TimeProvider.System);
+
         services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
 
         services.AddMemoryCache();

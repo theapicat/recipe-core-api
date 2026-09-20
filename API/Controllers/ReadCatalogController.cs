@@ -8,7 +8,7 @@ namespace API.Controllers;
 // (én akse), mens denne bærer CQRS-formen (en annen akse), og C# tillater bare én baseklasse.
 // Den konkrete kontrolleren (f.eks. UserAllergenController) setter selv [Route]/[Authorize].
 [ApiController]
-public abstract class ReadCatalogController<T>(IMediator mediator) : ControllerBase
+public abstract class ReadCatalogController<T, TKey>(IMediator mediator) : ControllerBase
 {
     protected readonly IMediator Mediator = mediator;
 
@@ -16,10 +16,13 @@ public abstract class ReadCatalogController<T>(IMediator mediator) : ControllerB
     public async Task<ActionResult<List<T>>> GetAll(CancellationToken cancellationToken)
         => Ok(await Mediator.Send(new GetAllCatalogQuery<T>(), cancellationToken));
 
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<T>> GetById(Guid id, CancellationToken cancellationToken)
+    [HttpGet("{id}")]
+    public async Task<ActionResult<T>> GetById(TKey id, CancellationToken cancellationToken)
     {
-        var result = await Mediator.Send(new GetCatalogByIdQuery<T>(id), cancellationToken);
+        var result = await Mediator.Send(new GetCatalogByIdQuery<T, TKey>(id), cancellationToken);
         return result is null ? NotFound() : Ok(result);
     }
 }
+
+// Snarvei for det vanlige tilfellet: Guid-nøkkel.
+public abstract class ReadCatalogController<T>(IMediator mediator) : ReadCatalogController<T, Guid>(mediator);

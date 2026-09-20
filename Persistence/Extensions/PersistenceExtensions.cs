@@ -4,6 +4,7 @@ using Domain.Recipes;
 using Domain.Units;
 using Microsoft.Extensions.DependencyInjection;
 using Persistence.Implementation;
+using Persistence.Interfaces;
 using Persistence.Services;
 
 namespace Persistence.Extensions;
@@ -15,6 +16,7 @@ public static class PersistenceExtensions
         // Postgres-kolonner er snake_case, C#-egenskaper er PascalCase - dette lar Dapper matche dem
         // automatisk (owner_user_id -> OwnerUserId) uten kolonne-alias i hver spørring.
         DefaultTypeMap.MatchNamesWithUnderscores = true;
+        SqlMapper.AddTypeHandler(new DateTimeOffsetTypeHandler());
 
         services.AddScoped<DbReader<IngredientCategory>, IngredientCategoryReader>();
         services.AddScoped<DbWriter<IngredientCategory>, IngredientCategoryWriter>();
@@ -33,6 +35,16 @@ public static class PersistenceExtensions
 
         services.AddScoped<DbReader<RecipeCategory>, RecipeCategoryReader>();
         services.AddScoped<DbWriter<RecipeCategory>, RecipeCategoryWriter>();
+
+        services.AddScoped<DbReader<NutrientDefinition>, NutrientDefinitionReader>();
+        services.AddScoped<DbWriter<NutrientDefinition>, NutrientDefinitionWriter>();
+
+        services.AddScoped<DbReader<IngredientListItem>, IngredientListItemReader>();
+        services.AddScoped<DbReader<Ingredient>, IngredientReader>();
+        services.AddScoped<DbWriter<Ingredient>, IngredientWriter>();
+
+        services.AddScoped<IUnconfirmedIngredientReader, UnconfirmedIngredientReader>();
+        services.AddScoped<IUnconfirmedIngredientWriter, UnconfirmedIngredientWriter>();
 
         return services;
     }

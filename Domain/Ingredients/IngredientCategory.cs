@@ -1,7 +1,8 @@
 namespace Domain.Ingredients;
 
-public class IngredientCategory
+public class IngredientCategory : IHasId<Guid>
 {
-    public required Guid Id { get; set; }
+    // Tildeles av serveren ved opprettelse (Guid.CreateVersion7), ikke krevd i request-body.
+    public Guid Id { get; set; }
     public required string Name { get; set; }
 }

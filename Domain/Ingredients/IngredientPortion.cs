@@ -2,7 +2,7 @@ namespace Domain.Ingredients;
 
 // Enhet -> gram-konvertering per ingrediens (speiler Matvaretabellens "portions"-data),
 // i stedet for en generell tetthetsberegning.
-public class IngredientPortion
+public class IngredientPortion : IHasId<Guid>
 {
     public required Guid Id { get; set; }
     public required Guid IngredientId { get; set; }

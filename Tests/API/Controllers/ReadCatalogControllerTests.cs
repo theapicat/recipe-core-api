@@ -29,7 +29,7 @@ public class ReadCatalogControllerTests
     {
         var mediator = Substitute.For<IMediator>();
         var item = new Allergen { Id = Guid.NewGuid(), Name = "Gluten" };
-        mediator.Send(Arg.Any<GetCatalogByIdQuery<Allergen>>(), Arg.Any<CancellationToken>()).Returns(item);
+        mediator.Send(Arg.Any<GetCatalogByIdQuery<Allergen, Guid>>(), Arg.Any<CancellationToken>()).Returns(item);
         var controller = new UserAllergenController(mediator);
 
         var result = await controller.GetById(item.Id, CancellationToken.None);
@@ -42,7 +42,7 @@ public class ReadCatalogControllerTests
     public async Task GetById_ReturnsNotFound_WhenMissing()
     {
         var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<GetCatalogByIdQuery<Allergen>>(), Arg.Any<CancellationToken>()).Returns((Allergen?)null);
+        mediator.Send(Arg.Any<GetCatalogByIdQuery<Allergen, Guid>>(), Arg.Any<CancellationToken>()).Returns((Allergen?)null);
         var controller = new UserAllergenController(mediator);
 
         var result = await controller.GetById(Guid.NewGuid(), CancellationToken.None);

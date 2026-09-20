@@ -23,9 +23,9 @@ public class GetCatalogByIdQueryHandlerTests
     {
         var expected = new IngredientCategory { Id = Guid.NewGuid(), Name = "Meieri" };
         var reader = new FakeReader(expected);
-        var handler = new GetCatalogByIdQueryHandler<IngredientCategory>(reader);
+        var handler = new GetCatalogByIdQueryHandler<IngredientCategory, Guid>(reader);
 
-        var result = await handler.Handle(new GetCatalogByIdQuery<IngredientCategory>(expected.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetCatalogByIdQuery<IngredientCategory, Guid>(expected.Id), CancellationToken.None);
 
         Assert.Same(expected, result);
         Assert.Equal(1, reader.CallCount);
@@ -35,9 +35,9 @@ public class GetCatalogByIdQueryHandlerTests
     public async Task Handle_ReturnsNull_WhenNotFound()
     {
         var reader = new FakeReader(null);
-        var handler = new GetCatalogByIdQueryHandler<IngredientCategory>(reader);
+        var handler = new GetCatalogByIdQueryHandler<IngredientCategory, Guid>(reader);
 
-        var result = await handler.Handle(new GetCatalogByIdQuery<IngredientCategory>(Guid.NewGuid()), CancellationToken.None);
+        var result = await handler.Handle(new GetCatalogByIdQuery<IngredientCategory, Guid>(Guid.NewGuid()), CancellationToken.None);
 
         Assert.Null(result);
     }
