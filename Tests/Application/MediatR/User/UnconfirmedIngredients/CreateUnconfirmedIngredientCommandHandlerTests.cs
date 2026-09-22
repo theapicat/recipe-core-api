@@ -61,7 +61,7 @@ public class CreateUnconfirmedIngredientCommandHandlerTests
     private static IngredientListItem OfficialItem(string name) => new()
     {
         Id = Guid.NewGuid(), Name = name, CategoryId = Guid.NewGuid(), PrimaryUnitTypeId = Guid.NewGuid(),
-        DefaultUnitId = Guid.NewGuid(), EnergyKcal = 30, IsVerified = true, AllergenIds = [], SearchKeywordIds = []
+        DefaultUnitId = Guid.NewGuid(), EnergyKcal = 30, IsVerified = true, IsOfficial = true, AllergenIds = [], SearchKeywordIds = []
     };
 
     [Fact]

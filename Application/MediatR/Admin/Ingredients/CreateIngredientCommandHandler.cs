@@ -7,7 +7,7 @@ using Persistence.Services;
 
 namespace Application.MediatR.Admin.Ingredients;
 
-public class CreateIngredientCommandHandler(DbWriter<Ingredient> writer, ICacheService cache)
+public class CreateIngredientCommandHandler(DbWriter<Ingredient> writer, ICacheService cache, IMediator mediator, TimeProvider timeProvider)
     : IRequestHandler<CreateIngredientCommand, Result<Ingredient>>
 {
     public async Task<Result<Ingredient>> Handle(CreateIngredientCommand request, CancellationToken cancellationToken)
@@ -16,7 +16,12 @@ public class CreateIngredientCommandHandler(DbWriter<Ingredient> writer, ICacheS
         if (error is not null)
             return Result<Ingredient>.Invalid(error);
 
-        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, Guid.CreateVersion7());
+        var fkError = await IngredientForeignKeyValidator.ValidateAsync(mediator, request.Ingredient, null, cancellationToken);
+        if (fkError is not null)
+            return Result<Ingredient>.Invalid(fkError);
+
+        // isOfficial er alltid false her - kun seed-data er offisiell (se seed_10..25 og Documentation/06).
+        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, Guid.CreateVersion7(), isOfficial: false, timeProvider.GetUtcNow());
         await writer.AddAsync(ingredient);
         cache.Remove(CatalogCacheKey.ForAll<IngredientListItem>());
 

@@ -1,8 +1,10 @@
 using Application.Caching.Interfaces;
 using Application.MediatR.Admin.Ingredients;
 using Application.MediatR.Admin.UnconfirmedIngredients;
+using Application.MediatR.Catalog;
 using Application.Results;
 using Domain.Ingredients;
+using MediatR;
 using NSubstitute;
 using Persistence.Interfaces;
 using Tests.Application.MediatR.Admin.Ingredients;
@@ -16,6 +18,7 @@ public class AdminUnconfirmedIngredientHandlersTests
     private readonly IUnconfirmedIngredientReader _reader = Substitute.For<IUnconfirmedIngredientReader>();
     private readonly IUnconfirmedIngredientWriter _writer = Substitute.For<IUnconfirmedIngredientWriter>();
     private readonly ICacheService _cache = Substitute.For<ICacheService>();
+    private readonly IMediator _mediator = IngredientTestData.PassthroughMediator();
 
     private UnconfirmedIngredient PendingStub()
     {
@@ -24,7 +27,7 @@ public class AdminUnconfirmedIngredientHandlersTests
         return stub;
     }
 
-    private ApproveUnconfirmedIngredientCommandHandler ApproveHandler() => new(_reader, _writer, _cache, TimeProvider.System);
+    private ApproveUnconfirmedIngredientCommandHandler ApproveHandler() => new(_reader, _writer, _cache, _mediator, TimeProvider.System);
 
     [Fact]
     public async Task Approve_ReturnsNotFound_ForAnUnknownRequest()
@@ -64,6 +67,8 @@ public class AdminUnconfirmedIngredientHandlersTests
         var stub = PendingStub();
         _writer.ResolveAsync(default, default, default, default, default).ReturnsForAnyArgs(true);
         var baseId = Guid.NewGuid();
+        _mediator.Send(Arg.Is<GetCatalogByIdQuery<Ingredient, Guid>>(q => q.Id == baseId), Arg.Any<CancellationToken>())
+            .Returns(IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), baseId, isOfficial: false, DateTimeOffset.UtcNow));
 
         var result = await ApproveHandler().Handle(
             new ApproveUnconfirmedIngredientCommand(stub.Id, IngredientTestData.ValidRequest() with { VariantOfIngredientId = baseId }),
@@ -105,7 +110,7 @@ public class AdminUnconfirmedIngredientHandlersTests
     public async Task Merge_ResolvesAsMergedWithoutCreatingAnIngredient()
     {
         var stub = PendingStub();
-        var target = IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), Guid.NewGuid());
+        var target = IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), Guid.NewGuid(), isOfficial: false, DateTimeOffset.UtcNow);
         _writer.ResolveAsync(default, default, default, default, default).ReturnsForAnyArgs(true);
         var handler = new MergeUnconfirmedIngredientCommandHandler(_reader, _writer, new FakeIngredientReader(target), TimeProvider.System);
 

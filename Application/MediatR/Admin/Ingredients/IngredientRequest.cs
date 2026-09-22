@@ -19,6 +19,10 @@ public record IngredientRequest
     public Guid? VariantOfIngredientId { get; init; }
 
     public bool IsVerified { get; init; }
+
+    // Sendes tilbake fra klientens siste GET for optimistisk samtidighetskontroll. Utelatt = ingen sjekk (bakoverkompatibelt).
+    public DateTimeOffset? UpdatedAt { get; init; }
+
     public List<Guid> AllergenIds { get; init; } = [];
     public List<Guid> SearchKeywordIds { get; init; } = [];
     public List<IngredientNutrientValueRequest> NutrientValues { get; init; } = [];

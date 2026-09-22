@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS unit (
     unit_type_id    uuid NOT NULL REFERENCES unit_type (id) ON DELETE RESTRICT,
     -- Forholdstall til enhetstypens basisenhet (f.eks. gram for Vekt) - universelt, ikke ingrediensavhengig.
     -- Mange desimaler fordi mikrogram er 0,000001 g.
-    base_unit_ratio numeric(20,10) NOT NULL
+    base_unit_ratio numeric(20,10) NOT NULL CHECK (base_unit_ratio > 0),
+    -- Sikkerhetsnett i tillegg til applikasjonsvalideringen (CatalogValidation) - fanger opp enhver skrivevei.
+    CHECK (abbreviation <> '')
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_unit_name ON unit (name);
@@ -112,7 +114,13 @@ CREATE TABLE IF NOT EXISTS ingredient (
     -- Satt når ingrediensen er en variant av en annen. Næringsdata kopieres ved opprettelse og følger ikke basen videre.
     variant_of_ingredient_id uuid REFERENCES ingredient (id) ON DELETE RESTRICT,
     -- false for adminlagte innslag som venter på fullstendige nærings-/allergendata.
-    is_verified             boolean NOT NULL
+    is_verified             boolean NOT NULL,
+    -- true kun for rader fra den offisielle kilden (Matvaretabellen-seeden). Tildeles av serveren, kan aldri endres via PUT -
+    -- en admin-opprettet eller brukergodkjent ingrediens er alltid false. Låser kildedata (navn, energi, spiselig del,
+    -- kilde-id/-url, næringsverdi-settet) mot endring - se IngredientMapper.ValidateOfficialLock.
+    is_official             boolean NOT NULL DEFAULT false,
+    -- Brukes til optimistisk samtidighetskontroll på PUT (klienten sender tilbake verdien fra sin siste GET).
+    updated_at              timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_ingredient_name ON ingredient (name);
@@ -156,6 +164,8 @@ CREATE TABLE IF NOT EXISTS ingredient_portion (
 );
 
 CREATE INDEX IF NOT EXISTS ix_ingredient_portion_ingredient_id ON ingredient_portion (ingredient_id);
+-- Én porsjonsdefinisjon per enhet per ingrediens - to rader for samme enhet ville gitt en tvetydig omregning.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ingredient_portion_ingredient_unit ON ingredient_portion (ingredient_id, unit_id);
 
 -- Brukeroppgitt ingrediens som ikke finnes i den offisielle katalogen ennå.
 -- created_by_user_id har ingen FK - brukeridentitet eies av en annen tjeneste/database.

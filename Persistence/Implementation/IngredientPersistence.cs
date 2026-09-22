@@ -11,12 +11,15 @@ internal static class IngredientPersistence
 {
     private const string InsertIngredientSql = """
         SELECT insert_ingredient(@Id, @Name, @CategoryId, @PrimaryUnitTypeId, @DefaultUnitId, @EnergyKcal, @EnergyKj,
-                                 @EdiblePartPercent, @SourceId, @SourceUrl, @VariantOfIngredientId, @IsVerified);
+                                 @EdiblePartPercent, @SourceId, @SourceUrl, @VariantOfIngredientId, @IsVerified,
+                                 @IsOfficial, @UpdatedAt);
         """;
 
+    // is_official er bevisst ikke med her - update_ingredient tar ikke imot den, den kan aldri endres via PUT.
     private const string UpdateIngredientSql = """
         SELECT update_ingredient(@Id, @Name, @CategoryId, @PrimaryUnitTypeId, @DefaultUnitId, @EnergyKcal, @EnergyKj,
-                                 @EdiblePartPercent, @SourceId, @SourceUrl, @VariantOfIngredientId, @IsVerified);
+                                 @EdiblePartPercent, @SourceId, @SourceUrl, @VariantOfIngredientId, @IsVerified,
+                                 @UpdatedAt);
         """;
 
     public static async Task InsertAsync(IDbConnection connection, IDbTransaction transaction, Ingredient ingredient)
@@ -70,9 +73,10 @@ internal static class IngredientPersistence
                 portions, transaction);
     }
 
+    // Dapper binder kun @-tokens som faktisk finnes i SQL-teksten, så @IsOfficial ignoreres trygt av UpdateIngredientSql.
     private static object ToParameters(Ingredient i) => new
     {
         i.Id, i.Name, i.CategoryId, i.PrimaryUnitTypeId, i.DefaultUnitId, i.EnergyKcal, i.EnergyKj,
-        i.EdiblePartPercent, i.SourceId, i.SourceUrl, i.VariantOfIngredientId, i.IsVerified
+        i.EdiblePartPercent, i.SourceId, i.SourceUrl, i.VariantOfIngredientId, i.IsVerified, i.IsOfficial, i.UpdatedAt
     };
 }

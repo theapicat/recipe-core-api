@@ -28,6 +28,7 @@ public class SearchIngredientsQueryHandlerTests
         DefaultUnitId = Guid.NewGuid(),
         EnergyKcal = 1,
         IsVerified = true,
+        IsOfficial = false,
         AllergenIds = allergens,
         SearchKeywordIds = keywords
     };

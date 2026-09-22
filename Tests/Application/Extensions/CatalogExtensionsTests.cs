@@ -1,5 +1,6 @@
 using Application.Extensions;
 using Application.MediatR.Catalog;
+using Application.Results;
 using Domain.Ingredients;
 using Domain.Recipes;
 using MediatR;
@@ -40,9 +41,9 @@ public class CatalogExtensionsTests
         Assert.Contains(services, sd => sd.ServiceType == Handler(
             typeof(GetCatalogByIdQuery<,>).MakeGenericType(entity, key), entity));
         Assert.Contains(services, sd => sd.ServiceType == Handler(
-            typeof(InsertCatalogCommand<,>).MakeGenericType(entity, key), key));
+            typeof(InsertCatalogCommand<,>).MakeGenericType(entity, key), typeof(Result<>).MakeGenericType(key)));
         Assert.Contains(services, sd => sd.ServiceType == Handler(
-            typeof(UpdateCatalogCommand<>).MakeGenericType(entity), typeof(bool)));
+            typeof(UpdateCatalogCommand<>).MakeGenericType(entity), typeof(Result)));
         Assert.Contains(services, sd => sd.ServiceType == Handler(
             typeof(DeleteCatalogCommand<,>).MakeGenericType(entity, key), typeof(bool)));
     }
@@ -59,9 +60,9 @@ public class CatalogExtensionsTests
         Assert.Contains(services, sd => sd.ServiceType == Handler(
             typeof(GetCatalogByIdQuery<NutrientDefinition, string>), typeof(NutrientDefinition)));
         Assert.DoesNotContain(services, sd => sd.ServiceType == Handler(
-            typeof(InsertCatalogCommand<NutrientDefinition, string>), typeof(string)));
+            typeof(InsertCatalogCommand<NutrientDefinition, string>), typeof(Result<string>)));
         Assert.DoesNotContain(services, sd => sd.ServiceType == Handler(
-            typeof(UpdateCatalogCommand<NutrientDefinition>), typeof(bool)));
+            typeof(UpdateCatalogCommand<NutrientDefinition>), typeof(Result)));
         Assert.DoesNotContain(services, sd => sd.ServiceType == Handler(
             typeof(DeleteCatalogCommand<NutrientDefinition, string>), typeof(bool)));
     }
@@ -90,6 +91,6 @@ public class CatalogExtensionsTests
         Assert.Contains(services, sd => sd.ServiceType == Handler(
             typeof(GetCatalogByIdQuery<Ingredient, Guid>), typeof(Ingredient)));
         Assert.DoesNotContain(services, sd => sd.ServiceType == Handler(
-            typeof(InsertCatalogCommand<Ingredient, Guid>), typeof(Guid)));
+            typeof(InsertCatalogCommand<Ingredient, Guid>), typeof(Result<Guid>)));
     }
 }

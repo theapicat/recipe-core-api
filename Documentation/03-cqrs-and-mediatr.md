@@ -57,8 +57,11 @@ i `CatalogExtensions`) — ingen Insert/Update/Delete-handler, ingen `DbWriter` 
 | `GetAllCatalogQuery<T>` / `…Handler<T>` | Lesing | Cache-aside: sjekker cache, henter fra `DbReader<T>` og fyller cachen ved miss. |
 | `GetCatalogByIdQuery<T, TKey>` / `…Handler<T, TKey>` | Lesing | Går alltid direkte til databasen — brukes til redigeringsskjema der data må være ferskt. |
 | `InsertCatalogCommand<T, TKey>` / `…Handler<T, TKey>` | Skriving | Tildeler id (se under), skriver via `DbWriter<T>`, ugyldiggjør cachen, **returnerer id-en**. |
-| `UpdateCatalogCommand<T>` / `…Handler<T>` | Skriving | Skriver via `DbWriter<T>`, ugyldiggjør cachen. |
+| `UpdateCatalogCommand<T>` / `…Handler<T>` | Skriving | Validerer (`Result`), skriver via `DbWriter<T>`, ugyldiggjør cachen. |
 | `DeleteCatalogCommand<T, TKey>` / `…Handler<T, TKey>` | Skriving | Sletter, ugyldiggjør cachen, returnerer `bool` (var en rad slettet?). |
+
+Insert/Update returnerer `Result<TKey>`/`Result` (ikke rå `TKey`/`bool`) siden 2026-09-22 - se «Navnenormalisering og
+-validering» under for hvorfor.
 
 `CatalogCacheKey.ForAll<T>()` (internal) bygger nøkkelen (`catalog:{typeof(T).Name}:all`) — samme hjelper for lese-
 og skriveside, slik at nøkkelformatet ikke kan drifte fra hverandre.
@@ -82,14 +85,15 @@ oppskriften tilbake fra databasen så svaret har ingrediensnavnene med. `GetReci
 porsjoner, næringsverdier) fra `IRecipeReader` og overlater regnestykket til `RecipeNutritionCalculator` — en ren, statisk klasse, så logikken (omregning til
 gram, uspiselig del, kun stoffer med verdi) er enhetstestbar uten database.
 
-### Navnenormalisering
+### Navnenormalisering og -validering
 
-Insert- og Update-handlerne kaller `CatalogNormalization.Apply` før skriving: navnet (`IHasName`) trimmes, mellomrom slås
-sammen og alt gjøres om til små bokstaver (enhetens forkortelse er et symbol — `µg`, `mg-ATE` — og trimmes bare, via
-`NameNormalizer.Tidy`) (`Application.Naming.NameNormalizer`, samme funksjon
-brukes ved ingrediensnavn, ubekreftede ingredienser og søk). Databasen håndhever det samme (unik indeks + `CHECK (name =
-lower(name))`), så en kodesti som glemmer normalisering feiler høylytt i stedet for å lagre feil. Tomt navn avvises av
-kontrolleren med `400`.
+Insert- og Update-handlerne kaller `CatalogValidation.ValidateAsync` (`Result.Invalid` ved feil) **før** `CatalogNormalization.Apply`
+(som trimmer navnet og gjør det om til små bokstaver, og trimmer - men beholder store/små bokstaver på - enhetens forkortelse via
+`NameNormalizer.Tidy`). `CatalogValidation` dispatcher på `T` akkurat som `CatalogNormalization` (samme mønster): tomt navn (flyttet hit fra
+kontrolleren 2026-09-22, siden kontrolleren ikke skal inneholde forretningsregler) gjelder alle typer, og `Domain.Units.Unit` får i tillegg egne
+regler som krever et oppslag mot enhetstype-katalogen (blank forkortelse, forholdstall ≤ 0, ukjent enhetstype, «antall»-enheter med annet
+forholdstall enn 1 - se `Documentation/08-api-reference.md`). Databasen håndhever navnereglene i tillegg (unik indeks + `CHECK (name =
+lower(name))`), så en kodesti som glemmer normalisering feiler høylytt i stedet for å lagre feil.
 
 ### Hvorfor cache-orkestreringen ligger i handleren, ikke i cache-tjenesten
 

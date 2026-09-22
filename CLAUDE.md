@@ -8,9 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 meal planning, and user data. It sits behind a YARP gateway and talks to sibling microservices
 (`recipe-scraper-service`, `recipe-notification-service`) over RabbitMQ, not direct HTTP calls. This repo
 is early-stage: the domain model, all catalog models (catalogs, nutrient definitions, ingredients, and users'
-unconfirmed-ingredient requests) and JWT auth are built end-to-end; recipes (CRUD, favorite, nutrition calculation) are built end-to-end; meal planning, shopping lists and a product model are not started (see
-`RECIPE_BACKEND_NOTES.md` for the domain model's design rationale, and `Documentation/` for everything
-else — start with `Documentation/01-architecture-and-setup.md`; every endpoint with JSON samples is in `Documentation/08-api-reference.md`).
+unconfirmed-ingredient requests) and JWT auth are built end-to-end; recipes (CRUD, favorite, nutrition calculation) are built end-to-end; meal planning, shopping lists and a product model are not started. Start with
+`Documentation/01-architecture-and-setup.md`; every endpoint with JSON samples is in `Documentation/08-api-reference.md`.
 
 ## Commands
 
@@ -18,7 +17,7 @@ else — start with `Documentation/01-architecture-and-setup.md`; every endpoint
 dotnet build                          # build the whole solution
 dotnet run --project API              # run the API (http://localhost:5002, see API/Properties/launchSettings.json)
 dotnet watch --project API run        # run with hot reload
-dotnet test Tests/Tests.csproj        # run unit tests (205 tests, no external dependencies needed)
+dotnet test Tests/Tests.csproj        # run unit tests (264 tests, no external dependencies needed)
 ```
 
 Local dependencies (Postgres, RabbitMQ, Seq) are expected to run externally (e.g. via the platform's
@@ -74,13 +73,12 @@ access-tier axis both want that slot) and apply `[Route]`/`[Authorize(...)]` dir
 the complete endpoint table: `Documentation/02-endpoints-and-controllers.md`.
 
 **Before adding any `/api/user`, `/api/admin` or `/hubs` endpoint, read
-`Documentation/05-authentication-and-authorization.md`** (implemented state) and the "Autentisering og
-autorisering" section of `RECIPE_BACKEND_NOTES.md` (full rationale). Core API validates the JWT itself,
+`Documentation/05-authentication-and-authorization.md`** (implementation + rationale). Core API validates the JWT itself,
 never trusts `X-User-Id`/`X-User-Roles`, reads the user id from `ClaimTypes.NameIdentifier` (not `"sub"`),
 and uses lowercase roles (`admin`/`user`). `Jwt:Key`/`Issuer`/`Audience` must match the gateway and auth-api;
 the app throws at startup if any is missing.
 
-### Domain model notes (see `RECIPE_BACKEND_NOTES.md` for full rationale)
+### Domain model notes
 
 - Recipes are strictly user-owned (`Recipe.OwnerUserId`); there is no sharing/lineage model yet.
 - `RecipeSource` distinguishes manually-created vs. scraped recipes (scraped ones carry a locked `Url`
@@ -102,6 +100,11 @@ the app throws at startup if any is missing.
   `Documentation/02-endpoints-and-controllers.md` §5.
 - `Recipe.CookTimeMinutes` is a single total field — the sum of `RecipeStep.TimerMinutes` across steps
   that have a timer, not separate prep/cook fields.
+- `Ingredient.IsOfficial` (true only for the Matvaretabellen seed) locks source data (name, energy, edible part, source id/url,
+  the nutrient-value set) against `PUT` — `IngredientMapper.ValidateOfficialLock`; category, units, allergens, keywords, portions and
+  `IsVerified` stay editable. `Ingredient.UpdatedAt` backs optimistic concurrency on `PUT` (`IngredientRequest.UpdatedAt`, `409` on a
+  stale value). `IngredientForeignKeyValidator` checks every referenced id (category/unit type/unit/allergen/keyword/nutrient/variant)
+  exists before writing, with a specific `400` per case instead of a generic FK `409`. See `Documentation/08-api-reference.md`.
 
 ## Tech stack
 
@@ -115,7 +118,7 @@ the app throws at startup if any is missing.
   `Persistence/Scripts/`: `10000` tables, `20000` queries, `30000` commands, `11000/21000/31000` for changes —
   convention, idempotency rules and the freeze point are in `Documentation/06-persistence-and-data-access.md`).
   Reference and ingredient data is seeded by SQL scripts in `Persistence/Scripts/SeedData/` (`seed_<nn>_*.sql`, run by DbUp
-  after the numbered scripts; 1565 Matvaretabellen ingredients, all `is_verified = false`).
+  after the numbered scripts; 1565 Matvaretabellen ingredients, all `is_verified = true` and `is_official = true`).
 - SignalR for realtime push — wired (`Application/Realtime/RecipeHub.cs`, `/hubs/recipe`) but the hub has
   no methods yet, built ahead of need as a placeholder.
 - Serilog (Console + Seq sinks) for structured logging, configured via `API/Extensions/SerilogsExtensions.cs`
@@ -137,8 +140,7 @@ format and tone of the existing files when writing or updating one):
 - `07-test-strategy.md` — test tooling, what's covered, what's not.
 - `08-api-reference.md` — extended endpoint guide: every endpoint with request/response JSON, errors, limits, rules.
 
-`RECIPE_BACKEND_NOTES.md` (repo root) holds the domain model's design rationale — the "why", not the "how
-it's wired". Do not edit sibling-repo docs without asking the user first.
+Do not edit sibling-repo docs without asking the user first.
 
 ## Language note
 

@@ -14,8 +14,7 @@ måltidsplanlegging og brukerdata. Den ligger bak en YARP-gateway og snakker med
 Repoet er tidlig i utviklingen: domenemodellen, hele ingrediens-/katalogsiden (kategorier, allergener, enheter,
 næringsstoffer, ingredienser og brukernes ubekreftede ingredienser) og oppskrifter (CRUD, favoritt og næringsberegning) er bygget
 ende-til-ende, med seedet referansedata og 1 565 ingredienser. Måltidsplan, handleliste og en produkt-modell er ikke påbegynt ennå.
-Se `RECIPE_BACKEND_NOTES.md` for designbegrunnelsen bak domenemodellen og [`08-api-reference.md`](08-api-reference.md)
-for alle endepunkter med forespørsel og svar.
+Se [`08-api-reference.md`](08-api-reference.md) for alle endepunkter med forespørsel og svar.
 
 ---
 

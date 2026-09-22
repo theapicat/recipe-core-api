@@ -189,17 +189,22 @@ CREATE OR REPLACE FUNCTION insert_ingredient(
     p_source_id text,
     p_source_url text,
     p_variant_of_ingredient_id uuid,
-    p_is_verified boolean
+    p_is_verified boolean,
+    p_is_official boolean,
+    p_updated_at timestamptz
 )
 RETURNS void
 LANGUAGE sql
 AS $$
     INSERT INTO ingredient (id, name, category_id, primary_unit_type_id, default_unit_id, energy_kcal, energy_kj,
-                            edible_part_percent, source_id, source_url, variant_of_ingredient_id, is_verified)
+                            edible_part_percent, source_id, source_url, variant_of_ingredient_id, is_verified,
+                            is_official, updated_at)
     VALUES (p_id, p_name, p_category_id, p_primary_unit_type_id, p_default_unit_id, p_energy_kcal, p_energy_kj,
-            p_edible_part_percent, p_source_id, p_source_url, p_variant_of_ingredient_id, p_is_verified);
+            p_edible_part_percent, p_source_id, p_source_url, p_variant_of_ingredient_id, p_is_verified,
+            p_is_official, p_updated_at);
 $$;
 
+-- is_official er bevisst ikke en parameter her - den kan aldri endres via oppdatering, kun ved opprettelse.
 CREATE OR REPLACE FUNCTION update_ingredient(
     p_id uuid,
     p_name text,
@@ -212,7 +217,8 @@ CREATE OR REPLACE FUNCTION update_ingredient(
     p_source_id text,
     p_source_url text,
     p_variant_of_ingredient_id uuid,
-    p_is_verified boolean
+    p_is_verified boolean,
+    p_updated_at timestamptz
 )
 RETURNS void
 LANGUAGE sql
@@ -228,7 +234,8 @@ AS $$
         source_id = p_source_id,
         source_url = p_source_url,
         variant_of_ingredient_id = p_variant_of_ingredient_id,
-        is_verified = p_is_verified
+        is_verified = p_is_verified,
+        updated_at = p_updated_at
     WHERE id = p_id;
 $$;
 

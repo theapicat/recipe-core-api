@@ -12,6 +12,10 @@ public class IngredientListItem
     public required Guid DefaultUnitId { get; set; }
     public required decimal EnergyKcal { get; set; }
     public required bool IsVerified { get; set; }
+
+    // true kun for rader fra den offisielle kilden (Matvaretabellen-seeden) - se Ingredient.IsOfficial.
+    public required bool IsOfficial { get; set; }
+
     public Guid? VariantOfIngredientId { get; set; }
     public required Guid[] AllergenIds { get; set; }
     public required Guid[] SearchKeywordIds { get; set; }

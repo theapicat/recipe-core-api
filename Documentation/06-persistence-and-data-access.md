@@ -56,7 +56,11 @@ finnes **bare** når modellen trenger metoder utover malen.
 - **`Ingredient`** — `IngredientReader` overstyrer `GetByIdAsync` og henter raden og alle barn (allergener, nøkkelord,
   næringsverdier, porsjoner) i ett `QueryMultiple`-kall. `IngredientWriter` overstyrer `AddAsync`/`UpdateAsync` slik at
   ingrediensen og barna skrives i **én transaksjon** (malen åpner ellers ny forbindelse per kall). Oppdatering
-  erstatter barna (slett + sett inn). Delt SQL-logikk ligger i `IngredientPersistence` (internal).
+  erstatter barna (slett + sett inn). Delt SQL-logikk ligger i `IngredientPersistence` (internal). `is_official` er bevisst ikke en
+  parameter i `update_ingredient` (kun i `insert_ingredient`) - kan derfor strukturelt ikke endres via oppdatering, selv om et
+  fremtidig skrivevei skulle glemme å beskytte det i C#. `updated_at` settes eksplisitt av handleren (ingen `DEFAULT`-avhengighet)
+  ved både opprettelse og oppdatering, til bruk i `IngredientMapper.ValidateOfficialLock`/samtidighetssjekken i
+  `UpdateIngredientCommandHandler` (`Documentation/08-api-reference.md`).
 - **`IngredientListItem`** — `IngredientListItemReader`, kun `GetAll` (lettvekts-liste til cachen).
 - **`UnconfirmedIngredient`** — egne grensesnitt i `Persistence/Interfaces/` (`IUnconfirmedIngredientReader`/
   `Writer`) siden den trenger spørringer per bruker/status, telling til grenser og statusendringer. Endrende metoder
@@ -142,8 +146,10 @@ hvert **én gang** (journalført i `schemaversions`), og er skrevet idempotent (
   trengs; manglende ingredienser legges til senere (via admin eller nye seed-skript). Produkter kjøpt ferdig i kafé/bakeri
   (12 stk, navn med «kjøpt i kafé/bakeri») er tatt ut. Andre ferdigprodukter og retter (yoghurt med smak, ferdigmat …) er
   bevisst beholdt inntil videre: skillet mellom ingrediens og produkt er ikke avgjort ennå (se `todo.md`).
-- **Alle importerte ingredienser har `is_verified = false`:** kilden har ingen allergendata, så `ingredient_allergen` er
-  tom. Allergenfilteret kan derfor ikke stoles på før allergener er tilordnet (planlagt, se `todo.md`).
+- **Alle importerte ingredienser har `is_verified = true` og `is_official = true`** (2026-09-22: de er offisielle, ferdig
+  næringsbelagte rader fra kilden - kun allergener mangler). `ingredient_allergen` er likevel tom (kilden har ingen allergendata), så
+  allergenfilteret kan ikke stoles på før allergener er tilordnet (planlagt, se `todo.md`). `is_official` låser kildedata mot endring
+  via `PUT` (`IngredientMapper.ValidateOfficialLock`) - se `Documentation/08-api-reference.md`.
 - **Næringsverdier** er *per 100 g spiselig del* (Matvaretabellens konvensjon; `edible_part_percent` sier hvor stor del av
   matvaren som er spiselig), og sparsomme: kun målte verdier lagres (`0` = målt som null, manglende rad = ukjent).
 - Skriptene ble generert (2026-09-20) av et engangs hjelpescript fra Matvaretabellens rådata (`foods.json`, `nutrients.json`,
@@ -172,6 +178,11 @@ symbol (`µg`, `mg-ATE`) og er unntatt fra små-bokstav-regelen; den har unik in
 er 0,000001 g er `unit.base_unit_ratio` `numeric(20,10)`. Ubekreftede ingredienser har unik `(created_by_user_id, name)` bortsett fra løste (`Approved`/`Merged`,
 som er historikk). Brudd gir `409` via `PostgresExceptionHandler`. `nutrient_definition.name` er unntatt (navn som NaCl
 og EPA beholder store bokstaver). Seed-data må derfor være skrevet med små bokstaver.
+
+`unit` har i tillegg `CHECK (abbreviation <> '')` og `CHECK (base_unit_ratio > 0)` (2026-09-22) - et sikkerhetsnett bak
+`CatalogValidation` i Application, som er der de faktiske `400`-feilmeldingene kommer fra (`Documentation/08-api-reference.md`).
+`ingredient_portion` har unik indeks `(ingredient_id, unit_id)` av samme grunn: to porsjonsdefinisjoner for samme enhet ville
+gjort omregningen tvetydig.
 
 ### Primærnøkler
 

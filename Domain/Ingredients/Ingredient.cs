@@ -29,4 +29,12 @@ public class Ingredient : IHasId<Guid>
 
     // false for adminlagte innslag som venter på fullstendige nærings-/allergendata.
     public required bool IsVerified { get; set; }
+
+    // true kun for rader fra den offisielle kilden (Matvaretabellen-seeden). Tildeles av serveren ved opprettelse og kan
+    // aldri endres via PUT - en admin-opprettet eller brukergodkjent ingrediens er alltid false.
+    public required bool IsOfficial { get; set; }
+
+    // Brukes til optimistisk samtidighetskontroll: IngredientRequest.UpdatedAt sendes tilbake på PUT og sammenlignes mot
+    // denne før skriving.
+    public required DateTimeOffset UpdatedAt { get; set; }
 }

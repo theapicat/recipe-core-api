@@ -172,6 +172,7 @@ RETURNS TABLE (
     default_unit_id          uuid,
     energy_kcal              numeric,
     is_verified              boolean,
+    is_official              boolean,
     variant_of_ingredient_id uuid,
     allergen_ids             uuid[],
     search_keyword_ids       uuid[]
@@ -185,6 +186,7 @@ AS $$
            i.default_unit_id,
            i.energy_kcal,
            i.is_verified,
+           i.is_official,
            i.variant_of_ingredient_id,
            COALESCE((SELECT array_agg(ia.allergen_id) FROM ingredient_allergen ia WHERE ia.ingredient_id = i.id), '{}'::uuid[]),
            COALESCE((SELECT array_agg(isk.search_keyword_id) FROM ingredient_search_keyword isk WHERE isk.ingredient_id = i.id), '{}'::uuid[])

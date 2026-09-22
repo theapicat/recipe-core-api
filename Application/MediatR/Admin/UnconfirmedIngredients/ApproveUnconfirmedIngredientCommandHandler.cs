@@ -12,6 +12,7 @@ public class ApproveUnconfirmedIngredientCommandHandler(
     IUnconfirmedIngredientReader reader,
     IUnconfirmedIngredientWriter writer,
     ICacheService cache,
+    IMediator mediator,
     TimeProvider timeProvider)
     : IRequestHandler<ApproveUnconfirmedIngredientCommand, Result<Ingredient>>
 {
@@ -28,7 +29,12 @@ public class ApproveUnconfirmedIngredientCommandHandler(
         if (stub.ReviewStatus != UnconfirmedIngredientStatus.Pending)
             return Result<Ingredient>.Conflict("Bare ventende forespørsler kan godkjennes.");
 
-        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, Guid.CreateVersion7());
+        var fkError = await IngredientForeignKeyValidator.ValidateAsync(mediator, request.Ingredient, null, cancellationToken);
+        if (fkError is not null)
+            return Result<Ingredient>.Invalid(fkError);
+
+        // Godkjent fra en brukers ubekreftede ingrediens - ikke offisiell (det er forbeholdt Matvaretabellen-seeden).
+        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, Guid.CreateVersion7(), isOfficial: false, timeProvider.GetUtcNow());
 
         var resolved = await writer.ResolveAsync(
             stub.Id, UnconfirmedIngredientStatus.Approved, ingredient.Id, ingredient, timeProvider.GetUtcNow());

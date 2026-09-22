@@ -7,7 +7,8 @@ using Persistence.Services;
 
 namespace Application.MediatR.Admin.Ingredients;
 
-public class UpdateIngredientCommandHandler(DbReader<Ingredient> reader, DbWriter<Ingredient> writer, ICacheService cache)
+public class UpdateIngredientCommandHandler(
+    DbReader<Ingredient> reader, DbWriter<Ingredient> writer, ICacheService cache, IMediator mediator, TimeProvider timeProvider)
     : IRequestHandler<UpdateIngredientCommand, Result<Ingredient>>
 {
     public async Task<Result<Ingredient>> Handle(UpdateIngredientCommand request, CancellationToken cancellationToken)
@@ -16,10 +17,27 @@ public class UpdateIngredientCommandHandler(DbReader<Ingredient> reader, DbWrite
         if (error is not null)
             return Result<Ingredient>.Invalid(error);
 
-        if (await reader.GetByIdAsync(request.Id) is null)
+        var existing = await reader.GetByIdAsync(request.Id);
+        if (existing is null)
             return Result<Ingredient>.NotFound();
 
-        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, request.Id);
+        // Optimistisk samtidighetskontroll: klienten sender tilbake tidspunktet fra sin siste GET. Utelatt = ingen sjekk.
+        if (request.Ingredient.UpdatedAt is { } clientUpdatedAt && clientUpdatedAt < existing.UpdatedAt)
+            return Result<Ingredient>.Conflict("Ingrediensen er endret av noen andre siden du åpnet den. Last den på nytt.");
+
+        if (existing.IsOfficial)
+        {
+            var lockError = IngredientMapper.ValidateOfficialLock(existing, request.Ingredient);
+            if (lockError is not null)
+                return Result<Ingredient>.Invalid(lockError);
+        }
+
+        var fkError = await IngredientForeignKeyValidator.ValidateAsync(mediator, request.Ingredient, request.Id, cancellationToken);
+        if (fkError is not null)
+            return Result<Ingredient>.Invalid(fkError);
+
+        // IsOfficial videreføres fra den lagrede raden - kan aldri settes/endres via body.
+        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, request.Id, existing.IsOfficial, timeProvider.GetUtcNow());
         await writer.UpdateAsync(ingredient);
         cache.Remove(CatalogCacheKey.ForAll<IngredientListItem>());
 

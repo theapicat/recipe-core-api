@@ -2,10 +2,7 @@
 
 ---
 
-Per 2026-09-20. Full designbegrunnelse og verifikasjonshistorikk (hvorfor JWT valideres lokalt, hvorfor
-`ClaimTypes.NameIdentifier` og ikke `"sub"`, testresultater fra en engangstest mot en ekte token) ligger i
-seksjonen «Autentisering og autorisering» i `RECIPE_BACKEND_NOTES.md`. Dette dokumentet beskriver kun
-gjeldende kodetilstand. Sjekk mot faktisk kode ved tvil.
+Per 2026-09-20. Sjekk mot faktisk kode ved tvil.
 
 ## 1. Prinsipp
 

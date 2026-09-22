@@ -79,8 +79,6 @@ recipe-core-api/
 | **[06-persistence-and-data-access.md](Documentation/06-persistence-and-data-access.md)** | Dapper-mønster, SQL-skript-nummerering, tilkoblingsoppsett. |
 | **[07-test-strategy.md](Documentation/07-test-strategy.md)** | Testverktøy, hva som er dekket, hva som mangler. |
 
-Domenemodellens designbegrunnelse («hvorfor») ligger i `RECIPE_BACKEND_NOTES.md`, ikke i `Documentation/`.
-
 ---
 
 *Husk: Når vi begynner å bygge ut de enkelte endepunktene, tabellstrukturene og SignalR-hubsene, oppdaterer vi denne README-en fortløpende så den alltid gjenspeiler koden!*

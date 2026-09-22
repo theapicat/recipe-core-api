@@ -1,4 +1,5 @@
 using Application.MediatR.Catalog;
+using Application.Results;
 using Domain.Ingredients;
 using Domain.Recipes;
 using MediatR;
@@ -69,14 +70,14 @@ public static class CatalogExtensions
         services.AddScoped(
             typeof(IRequestHandler<,>).MakeGenericType(
                 typeof(InsertCatalogCommand<,>).MakeGenericType(entity, key),
-                key),
+                typeof(Result<>).MakeGenericType(key)),
             typeof(InsertCatalogCommandHandler<,>).MakeGenericType(entity, key));
 
     private static void AddUpdate(IServiceCollection services, Type entity) =>
         services.AddScoped(
             typeof(IRequestHandler<,>).MakeGenericType(
                 typeof(UpdateCatalogCommand<>).MakeGenericType(entity),
-                typeof(bool)),
+                typeof(Result)),
             typeof(UpdateCatalogCommandHandler<>).MakeGenericType(entity));
 
     private static void AddDelete(IServiceCollection services, Type entity, Type key) =>

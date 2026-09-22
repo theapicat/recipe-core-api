@@ -574,9 +574,9 @@ INSERT INTO seed_keyword (source_id, name) VALUES
     ('09.004', 'sukker');
 
 INSERT INTO ingredient (id, name, category_id, primary_unit_type_id, default_unit_id, energy_kcal, energy_kj,
-                        edible_part_percent, source_id, source_url, variant_of_ingredient_id, is_verified)
+                        edible_part_percent, source_id, source_url, variant_of_ingredient_id, is_verified, is_official)
 SELECT pg_temp.seed_uuid_v7(), f.name, '01a088b5-a20b-72d5-af33-7b4d3b3d2cb7', f.primary_unit_type_id, f.default_unit_id,
-       f.energy_kcal, f.energy_kj, f.edible_part_percent, f.source_id, f.source_url, NULL, false
+       f.energy_kcal, f.energy_kj, f.edible_part_percent, f.source_id, f.source_url, NULL, true, true
 FROM (SELECT * FROM seed_food ORDER BY source_id) f
 ON CONFLICT DO NOTHING;
 

@@ -1,10 +1,13 @@
 using API.Controllers;
 using API.Controllers.AdminControllers.Catalog;
 using Application.MediatR.Catalog;
+using Application.Results;
 using Domain;
 using Domain.Ingredients;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using NSubstitute;
 using Xunit;
 
@@ -19,13 +22,26 @@ public class ReadWriteCatalogControllerTests
 
     private class TextKeyController(IMediator mediator) : ReadWriteCatalogController<TextKeyEntity, string>(mediator);
 
+    // ControllerBase.Problem() trenger en ProblemDetailsFactory - i en enhetstest finnes ingen DI, så en enkel stub settes inn.
+    private static ProblemDetailsFactory Factory()
+    {
+        var factory = Substitute.For<ProblemDetailsFactory>();
+        factory.CreateProblemDetails(Arg.Any<HttpContext>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+                Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns(call => new ProblemDetails { Status = call.ArgAt<int?>(1), Detail = call.ArgAt<string?>(4) });
+        return factory;
+    }
+
+    private static AdminAllergenController AllergenController(IMediator mediator) =>
+        new(mediator) { ProblemDetailsFactory = Factory() };
+
     [Fact]
     public async Task Insert_ReturnsCreated_WithTheServerAssignedId()
     {
         var mediator = Substitute.For<IMediator>();
         var newId = Guid.NewGuid();
-        mediator.Send(Arg.Any<InsertCatalogCommand<Allergen, Guid>>(), Arg.Any<CancellationToken>()).Returns(newId);
-        var controller = new AdminAllergenController(mediator);
+        mediator.Send(Arg.Any<InsertCatalogCommand<Allergen, Guid>>(), Arg.Any<CancellationToken>()).Returns(Result<Guid>.Success(newId));
+        var controller = AllergenController(mediator);
         var entity = new Allergen { Name = "Gluten" };
 
         var result = await controller.Insert(entity, CancellationToken.None);
@@ -40,8 +56,8 @@ public class ReadWriteCatalogControllerTests
     public async Task Update_ReturnsOk_WhenIdIsPresent()
     {
         var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<UpdateCatalogCommand<Allergen>>(), Arg.Any<CancellationToken>()).Returns(true);
-        var controller = new AdminAllergenController(mediator);
+        mediator.Send(Arg.Any<UpdateCatalogCommand<Allergen>>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var controller = AllergenController(mediator);
 
         var result = await controller.Update(new Allergen { Id = Guid.NewGuid(), Name = "Gluten" }, CancellationToken.None);
 
@@ -52,18 +68,18 @@ public class ReadWriteCatalogControllerTests
     public async Task Update_ReturnsBadRequest_WhenIdIsMissing()
     {
         var mediator = Substitute.For<IMediator>();
-        var controller = new AdminAllergenController(mediator);
+        var controller = AllergenController(mediator);
 
         var result = await controller.Update(new Allergen { Name = "Gluten" }, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
-        await mediator.DidNotReceiveWithAnyArgs().Send<bool>(default!, default);
+        await mediator.DidNotReceiveWithAnyArgs().Send<Result>(default!, default);
     }
 
     [Fact]
     public async Task Update_ReturnsBadRequest_WhenStringKeyIsBlank()
     {
-        var controller = new TextKeyController(Substitute.For<IMediator>());
+        var controller = new TextKeyController(Substitute.For<IMediator>()) { ProblemDetailsFactory = Factory() };
 
         var result = await controller.Update(new TextKeyEntity { Id = " " }, CancellationToken.None);
 
@@ -76,24 +92,28 @@ public class ReadWriteCatalogControllerTests
     public async Task Insert_ReturnsBadRequest_WhenTheNameIsBlank(string name)
     {
         var mediator = Substitute.For<IMediator>();
-        var controller = new AdminAllergenController(mediator);
+        mediator.Send(Arg.Any<InsertCatalogCommand<Allergen, Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(Result<Guid>.Invalid("Navn må oppgis."));
+        var controller = AllergenController(mediator);
 
         var result = await controller.Insert(new Allergen { Name = name }, CancellationToken.None);
 
-        Assert.IsType<BadRequestObjectResult>(result);
-        await mediator.DidNotReceiveWithAnyArgs().Send<Guid>(default!, default);
+        var problem = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
     }
 
     [Fact]
     public async Task Update_ReturnsBadRequest_WhenTheNameIsBlank()
     {
         var mediator = Substitute.For<IMediator>();
-        var controller = new AdminAllergenController(mediator);
+        mediator.Send(Arg.Any<UpdateCatalogCommand<Allergen>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Invalid("Navn må oppgis."));
+        var controller = AllergenController(mediator);
 
         var result = await controller.Update(new Allergen { Id = Guid.NewGuid(), Name = " " }, CancellationToken.None);
 
-        Assert.IsType<BadRequestObjectResult>(result);
-        await mediator.DidNotReceiveWithAnyArgs().Send<bool>(default!, default);
+        var problem = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
     }
 
     [Fact]

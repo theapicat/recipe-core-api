@@ -103,6 +103,11 @@ volum: ml, cl, dl, l, ts, ss, krm; antall: stk, klype, bunt, skive, fedd, neve, 
 (ingen id i stien) og svarer `200` uten kropp — også når raden ikke finnes (ingen `404`). `DELETE` svarer `204` selv om ingenting ble slettet; `409` hvis raden er i bruk.
 Tomt navn → `400`, eksisterende navn → `409`.
 
+**Enheter (`units`) har egne regler**, håndhevet i samme `POST`/`PUT` (`400` med norsk `detail`, sjekket etter navnesjekken): `abbreviation` kan ikke være tom (`"Forkortelse må oppgis."`);
+`baseUnitRatio` må være større enn 0 (`"Forholdstallet må være større enn 0."` — en ratio på 0 ville gitt feil næringsberegning uten synlig feil); `unitTypeId` må finnes (`"Enhetstypen finnes ikke."`);
+og for enheter av typen `antall` må `baseUnitRatio` være nøyaktig 1 (`"Enheter av typen antall regnes ikke om - forholdstallet må være 1."`, siden «antall»-enheter i praksis er ulike ting per ingrediens, se
+`ingredient_portion` under Ingredienser). Databasen har i tillegg `CHECK`-er på `abbreviation <> ''` og `base_unit_ratio > 0` som sikkerhetsnett.
+
 ### Næringsstoffer (skrivebeskyttet, kun GET)
 Statisk katalog fra seed-data; det finnes ingen skriving og ingen egne endepunkter for grupper — gruppen og enheten er nøstet i hvert stoff.
 
@@ -134,7 +139,7 @@ undergruppe er summen** (`Mettet`, `Enumet`, `Flerum`, `Vit A`), resten er delve
 // IngredientListItem (søkeresultat)
 { "id": "01a0c079-1096-7072-8bb5-0c4f309e4e58", "name": "egg, rå", "categoryId": "01a088b5-a201-7d6d-bc03-348c6500982e",
   "primaryUnitTypeId": "01a088b5-a201-7d1c-86ed-0faaf8ff9a8d", "defaultUnitId": "01a088b5-a205-7f7c-9319-cf1910cf8f70",
-  "energyKcal": 149, "isVerified": false, "variantOfIngredientId": null, "allergenIds": [], "searchKeywordIds": [] }
+  "energyKcal": 149, "isVerified": true, "isOfficial": true, "variantOfIngredientId": null, "allergenIds": [], "searchKeywordIds": [] }
 ```
 
 ```json
@@ -146,24 +151,38 @@ undergruppe er summen** (`Mettet`, `Enumet`, `Flerum`, `Vit A`), resten er delve
   "nutrientValues": [ { "id": "…", "ingredientId": "…", "nutrientDefinitionId": "Alko", "quantity": 0, "sourceId": "50" } ],
   "portions": [ { "id": "…", "ingredientId": "…", "unitId": "<stk>", "gramsPerPortion": 55 },
                 { "id": "…", "ingredientId": "…", "unitId": "<dl>",  "gramsPerPortion": 100 } ],
-  "isVerified": false }
+  "isVerified": true, "isOfficial": true, "updatedAt": "2026-09-22T19:47:52.629097+00:00" }
 ```
 - `nutrientValues` er **per 100 g spiselig del** og sparsomme (kun målte verdier; `0` = målt som null, manglende = ukjent). `energyKcal`/`energyKj` er per 100 g spiselig del.
 - `portions` er enhet → gram **for spiselig del** (banan: 1 stk = 120 g ved 66 % spiselig).
-- Alle 1 565 seedede ingredienser har `isVerified: false` og ingen `allergenIds` (kilden har ikke allergendata) — allergenfilteret er derfor ikke pålitelig ennå.
-- `defaultUnitId` er valgt ut fra porsjonene (dl hvis den har dl-porsjon, ellers stk, ellers ss, ellers første porsjon, ellers gram) — kan derfor være `dl` også for egg.
+- Alle 1 565 seedede ingredienser har `isVerified: true` og `isOfficial: true`, men ingen `allergenIds` (kilden har ikke allergendata) — allergenfilteret er derfor ikke pålitelig ennå.
+- **`isOfficial`** er `true` kun for Matvaretabellen-seeden. Tildeles av serveren; kan aldri settes eller endres via `POST`/`PUT` (et forsøk ignoreres stille — feltet finnes ikke i `IngredientRequest`). Se «Skriving» under for hva låsen betyr.
+- **`updatedAt`** brukes til optimistisk samtidighetskontroll, se under.
+- `defaultUnitId` er valgt ut fra porsjonene (dl hvis den har dl-porsjon, ellers stk, ellers ss, ellers første porsjon, ellers gram) — kan derfor være `dl` også for egg, og da er også `primaryUnitTypeId` volum, ikke vekt (settes fra samme regel).
 
-**Skriving (admin)** — `IngredientRequest` (ingen id-er; serveren tildeler id for ingrediensen og alle barn; `PUT` erstatter alle barn):
+**Skriving (admin)** — `IngredientRequest` (ingen id-er, ingen `isOfficial`; serveren tildeler id for ingrediensen og alle barn; `PUT` erstatter alle barn):
 
 ```json
 { "name": "gulrot, lilla", "categoryId": "…", "primaryUnitTypeId": "…", "defaultUnitId": "…", "energyKcal": 35,   // påkrevd: navn, kategori, enhetstype, standardenhet, kcal (≥ 0)
   "energyKj": 147, "ediblePartPercent": 85, "sourceId": null, "sourceUrl": null,
   "variantOfIngredientId": null,                     // sett for en variant av en annen ingrediens (klienten forhåndsutfyller data fra basen)
   "isVerified": false, "allergenIds": [], "searchKeywordIds": [],
-  "nutrientValues": [ { "nutrientDefinitionId": "Fett", "quantity": 0.2, "sourceId": null } ],   // quantity ≥ 0, ett per stoff
-  "portions": [ { "unitId": "<stk>", "gramsPerPortion": 90 } ] }                                  // gramsPerPortion > 0
+  "updatedAt": "2026-09-22T19:47:52.629097+00:00",   // valgfri, kun PUT: verdien fra klientens siste GET (se «Samtidighet» under)
+  "nutrientValues": [ { "nutrientDefinitionId": "Fett", "quantity": 0.2, "sourceId": null } ],   // quantity ≥ 0, ett per stoff, ingen duplikater
+  "portions": [ { "unitId": "<stk>", "gramsPerPortion": 90 } ] }                                  // gramsPerPortion > 0, ingen to porsjoner for samme enhet
 ```
-`400` ved tomt navn/negative verdier, `409` ved ukjent kategori/enhet/stoff, duplikat næringsverdi eller eksisterende navn. `DELETE` → `409` hvis ingrediensen brukes av en oppskrift, en variant eller en ubekreftet ingrediens.
+
+**Validering** (alle `400` med norsk `detail`, sjekket i denne rekkefølgen: format → samtidighet → offisiell-lås → fremmednøkler):
+- Tomt navn; `energyKcal`/`energyKj` negativ; `ediblePartPercent` utenfor `(0, 100]`; tall som ikke får plass i kolonnen (f.eks. `energyKcal` > 99 999 999,99); duplikat `nutrientDefinitionId`; `isVerified: true` uten minst én næringsverdi (`"Ingrediensen må ha næringsverdier for å kunne verifiseres."`); `sourceUrl` som ikke er http(s).
+- **Fremmednøkler finnes** (i stedet for en generisk `409` fra databasen): ukjent `categoryId`/`primaryUnitTypeId`/`defaultUnitId`/allergen/søkeord/næringsstoff-id gir en spesifikk `400` som navngir typen (f.eks. `"Kategorien finnes ikke."`, `"Næringsstoffet Fett finnes ikke."`). `defaultUnitId` må høre til `primaryUnitTypeId` (`"Standardenheten må høre til den valgte enhetstypen."`). To porsjoner med samme enhet gir `400` med enhetens navn (`"Enheten gram er brukt i flere porsjoner."`) — databasen har i tillegg en unik indeks `(ingredient_id, unit_id)` som sikkerhetsnett.
+- **`variantOfIngredientId`:** må finnes (`"Basisingrediensen finnes ikke."`), kan ikke være ingrediensen selv (`"En ingrediens kan ikke være en variant av seg selv."`), og variantkjeden kan ikke danne en løkke (`"Variantkjeden danner en løkke."`).
+
+**Offisielle ingredienser (`isOfficial: true`) — kildedata er låst.** `PUT` avvises med `400`, `detail`: **"Offisielle ingredienser kan ikke endre kildedata. Opprett en variant."**, hvis noe av dette avviker fra det lagrede (etter normalisering): `name`, `energyKcal`, `energyKj`, `ediblePartPercent`, `sourceId`, `sourceUrl`, eller **settet** av næringsverdier
+(`{nutrientDefinitionId, quantity, sourceId}` sammenlignet uavhengig av rad-id og rekkefølge — å sende dem i annen rekkefølge med nye id-er er altså greit). Fritt redigerbart uansett: `categoryId`, `primaryUnitTypeId`, `defaultUnitId`, `allergenIds`, `searchKeywordIds`, `portions`, `isVerified`. `variantOfIngredientId` kan ikke settes på en offisiell ingrediens (den er aldri en variant). `POST` setter alltid `isOfficial = false`, uansett hva klienten sender. `DELETE` av en offisiell ingrediens er fortsatt lov når den ikke er i bruk.
+
+**Samtidighet (optimistisk):** send `updatedAt` fra siste `GET` tilbake i `PUT`-body. Er den eldre enn det som er lagret → `409`, `detail`: **"Ingrediensen er endret av noen andre siden du åpnet den. Last den på nytt."** Utelates feltet, gjøres ingen sjekk (bakoverkompatibelt).
+
+`409` ved eksisterende navn eller kilde-id. `DELETE` → `409` hvis ingrediensen brukes av en oppskrift, en variant eller en ubekreftet ingrediens.
 
 ## 5. Ubekreftede ingredienser
 

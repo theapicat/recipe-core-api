@@ -7,4 +7,5 @@ public static class UnitTypeNames
 {
     public const string Weight = "vekt";
     public const string Volume = "volum";
+    public const string Count = "antall";
 }
