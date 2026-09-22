@@ -36,8 +36,21 @@ public class CreateIngredientCommandHandlerTests
         Assert.True(result.IsSuccess);
         Assert.NotEqual(Guid.Empty, result.Value!.Id);
         Assert.False(result.Value.IsOfficial);
+        Assert.Equal(0, result.Value.UsageCount);
         Assert.Same(result.Value, writer.Added);
         cache.Received(1).Remove(IngredientTestData.IngredientListCacheKey);
+    }
+
+    [Fact]
+    public async Task Handle_SetsCreatedAtToNow()
+    {
+        var writer = new FakeIngredientWriter();
+        var handler = new CreateIngredientCommandHandler(writer, Substitute.For<ICacheService>(), IngredientTestData.PassthroughMediator(), TimeProvider.System);
+        var before = DateTimeOffset.UtcNow;
+
+        var result = await handler.Handle(new CreateIngredientCommand(IngredientTestData.ValidRequest()), CancellationToken.None);
+
+        Assert.True(result.Value!.CreatedAt >= before);
     }
 
     [Fact]

@@ -11,7 +11,7 @@ namespace Tests.Application.MediatR.Admin.Ingredients;
 public class UpdateIngredientCommandHandlerTests
 {
     private static Ingredient Existing(Guid id, bool isOfficial = false) =>
-        IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), id, isOfficial, DateTimeOffset.UtcNow);
+        IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), id, isOfficial, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 
     [Fact]
     public async Task Handle_ReturnsNotFound_AndWritesNothing_WhenTheIngredientDoesNotExist()
@@ -59,6 +59,21 @@ public class UpdateIngredientCommandHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.True(writer.Updated!.IsOfficial);
+    }
+
+    [Fact]
+    public async Task Handle_PreservesCreatedAt_RegardlessOfTheRequest()
+    {
+        var id = Guid.NewGuid();
+        var existing = Existing(id);
+        var writer = new FakeIngredientWriter();
+        var handler = new UpdateIngredientCommandHandler(
+            new FakeIngredientReader(existing), writer, Substitute.For<ICacheService>(), IngredientTestData.PassthroughMediator(), TimeProvider.System);
+
+        var result = await handler.Handle(new UpdateIngredientCommand(id, IngredientTestData.ValidRequest()), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(existing.CreatedAt, writer.Updated!.CreatedAt);
     }
 
     [Fact]

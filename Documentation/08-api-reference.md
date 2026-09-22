@@ -52,7 +52,7 @@ Meldingen til brukeren er `detail ?? title`; les aldri en melding fra `404`/`401
 | GET | `/api/admin/<r>/{id}` | admin | → element / `404` |
 | POST | `/api/admin/<r>` | admin | element uten `id` → `201` + `Location` + element / `400` tomt navn / `409` navnet finnes |
 | PUT | `/api/admin/<r>` | admin | element **med `id`** i body → `200` (tom kropp) / `400` mangler id eller navn / `409` |
-| DELETE | `/api/admin/<r>/{id}` | admin | → `204` / `409` raden er i bruk |
+| DELETE | `/api/admin/<r>/{id}` | admin | → `204` / `404` ukjent id / `409` systemrad eller i bruk |
 | GET | `/api/user/nutrient-definitions` | bruker | → `NutrientDefinition[]` (57, sortert på `sortOrder`) |
 | GET | `/api/user/nutrient-definitions/{id}` | bruker | → `NutrientDefinition` / `404` (id URL-enkodet) |
 | GET | `/api/user/ingredients` | bruker | query-filtre → `IngredientListItem[]` |
@@ -61,7 +61,7 @@ Meldingen til brukeren er `detail ?? title`; les aldri en melding fra `404`/`401
 | GET | `/api/admin/ingredients/{id}` | admin | som over |
 | POST | `/api/admin/ingredients` | admin | `IngredientRequest` → `201` + `Ingredient` / `400` / `409` |
 | PUT | `/api/admin/ingredients/{id}` | admin | `IngredientRequest` → `200` + `Ingredient` (barna erstattes) / `400` / `404` / `409` |
-| DELETE | `/api/admin/ingredients/{id}` | admin | → `204` / `404` / `409` (brukt av oppskrift, variant eller ubekreftet) |
+| DELETE | `/api/admin/ingredients/{id}` | admin | → `204` / `404` / `409` `"Brukes fortsatt ({n} referanser) og kan ikke slettes."` (brukt av oppskrift, variant eller ubekreftet) |
 | GET | `/api/user/unconfirmed-ingredients` | bruker | → egne `UnconfirmedIngredient[]` (nyeste først) |
 | GET | `/api/user/unconfirmed-ingredients/{id}` | bruker | → element / `404` |
 | POST | `/api/user/unconfirmed-ingredients` | bruker | `{name, requestReview?}` → `201` + element / `400` / `409` |
@@ -89,19 +89,28 @@ Seks adminstyrte kataloger. Skjema (alle `id` er Guid, tildelt av serveren):
 
 ```json
 // Allergen, IngredientCategory, SearchKeyword, UnitType, RecipeCategory
-{ "id": "01a088b5-a202-73e1-98cd-73c0a3e2ab13", "name": "egg" }
+{ "id": "01a088b5-a202-73e1-98cd-73c0a3e2ab13", "name": "egg", "isSystem": true, "usageCount": 15 }
 
 // Unit (name og abbreviation er unike; abbreviation er et symbol og beholder store/små bokstaver: "g", "dl", "µg RAE", "mg-ATE")
 { "id": "01a088b5-a205-7f7c-9319-cf1910cf8f70", "name": "desiliter", "abbreviation": "dl",
   "unitTypeId": "01a088b5-a201-7d1c-86ed-0faaf8ff9a8d",   // vekt, volum eller antall
-  "baseUnitRatio": 100 }                                  // til enhetstypens basisenhet: gram (vekt) eller milliliter (volum); antall = 1 (ingen omregning)
+  "baseUnitRatio": 100,                                   // til enhetstypens basisenhet: gram (vekt) eller milliliter (volum); antall = 1 (ingen omregning)
+  "isSystem": true, "usageCount": 230 }
 ```
 Seedet: 16 ingrediens-kategorier, 15 allergener (14 EU + laktose), 13 oppskriftskategorier, 3 enhetstyper og 52 enheter (vekt: g, hg, kg, mg, µg, µg RAE, µg RE, mg-ATE;
 volum: ml, cl, dl, l, ts, ss, krm; antall: stk, klype, bunt, skive, fedd, neve, pk og ~30 porsjonsenheter som `glass` og `boks (liten)`).
 
-**Skriving (admin):** `POST` tar elementet uten `id` og svarer `201` med elementet (server-tildelt id). `PUT` tar hele elementet med `id` i body
-(ingen id i stien) og svarer `200` uten kropp — også når raden ikke finnes (ingen `404`). `DELETE` svarer `204` selv om ingenting ble slettet; `409` hvis raden er i bruk.
-Tomt navn → `400`, eksisterende navn → `409`.
+- **`isSystem`** (2026-09-22) er `true` kun for seed-rader (alle katalograder over unntatt `search-keywords`, som starter tom). Tildeles av
+  seed-data; kan aldri settes eller endres via `POST`/`PUT` (et forsøk ignoreres stille, og et forsøk om å sette den på `POST` blir i
+  tillegg nullstilt før den ekko-es tilbake i `201`-svaret). Blokkerer kun sletting — en systemrad er fortsatt fritt redigerbar.
+- **`usageCount`** (2026-09-22) telles fra referansene til raden ved hver lesing, aldri lagret (se fremmednøkkel-kartet i
+  `Documentation/06-persistence-and-data-access.md`). En rad med `usageCount > 0` kan ikke slettes.
+
+**Skriving (admin):** `POST` tar elementet uten `id` (og uten `isSystem`/`usageCount` — begge ignoreres om de sendes) og svarer `201` med
+elementet (server-tildelt id, `isSystem: false`, `usageCount: 0`). `PUT` tar hele elementet med `id` i body (ingen id i stien) og svarer
+`200` uten kropp — også når raden ikke finnes (ingen `404`, dette er det eneste stedet i API-et som fremdeles har dette avviket, se
+`todo.md`). `DELETE` → `204`, `404` hvis raden ikke finnes, `409` `"Systemrader (fra seed-data) kan ikke slettes."` for en systemrad, eller
+`409` `"Brukes fortsatt ({n} referanser) og kan ikke slettes."` hvis `usageCount > 0`. Tomt navn → `400`, eksisterende navn → `409`.
 
 **Enheter (`units`) har egne regler**, håndhevet i samme `POST`/`PUT` (`400` med norsk `detail`, sjekket etter navnesjekken): `abbreviation` kan ikke være tom (`"Forkortelse må oppgis."`);
 `baseUnitRatio` må være større enn 0 (`"Forholdstallet må være større enn 0."` — en ratio på 0 ville gitt feil næringsberegning uten synlig feil); `unitTypeId` må finnes (`"Enhetstypen finnes ikke."`);
@@ -139,7 +148,9 @@ undergruppe er summen** (`Mettet`, `Enumet`, `Flerum`, `Vit A`), resten er delve
 // IngredientListItem (søkeresultat)
 { "id": "01a0c079-1096-7072-8bb5-0c4f309e4e58", "name": "egg, rå", "categoryId": "01a088b5-a201-7d6d-bc03-348c6500982e",
   "primaryUnitTypeId": "01a088b5-a201-7d1c-86ed-0faaf8ff9a8d", "defaultUnitId": "01a088b5-a205-7f7c-9319-cf1910cf8f70",
-  "energyKcal": 149, "isVerified": true, "isOfficial": true, "variantOfIngredientId": null, "allergenIds": [], "searchKeywordIds": [] }
+  "energyKcal": 149, "isVerified": true, "isOfficial": true,
+  "createdAt": "2026-09-22T20:38:31.420758+00:00", "allergensReviewed": false, "usageCount": 0,
+  "variantOfIngredientId": null, "allergenIds": [], "searchKeywordIds": [] }
 ```
 
 ```json
@@ -151,13 +162,16 @@ undergruppe er summen** (`Mettet`, `Enumet`, `Flerum`, `Vit A`), resten er delve
   "nutrientValues": [ { "id": "…", "ingredientId": "…", "nutrientDefinitionId": "Alko", "quantity": 0, "sourceId": "50" } ],
   "portions": [ { "id": "…", "ingredientId": "…", "unitId": "<stk>", "gramsPerPortion": 55 },
                 { "id": "…", "ingredientId": "…", "unitId": "<dl>",  "gramsPerPortion": 100 } ],
-  "isVerified": true, "isOfficial": true, "updatedAt": "2026-09-22T19:47:52.629097+00:00" }
+  "isVerified": true, "isOfficial": true, "updatedAt": "2026-09-22T19:47:52.629097+00:00",
+  "createdAt": "2026-09-22T18:12:04.001000+00:00", "allergensReviewed": false, "usageCount": 0 }
 ```
 - `nutrientValues` er **per 100 g spiselig del** og sparsomme (kun målte verdier; `0` = målt som null, manglende = ukjent). `energyKcal`/`energyKj` er per 100 g spiselig del.
 - `portions` er enhet → gram **for spiselig del** (banan: 1 stk = 120 g ved 66 % spiselig).
-- Alle 1 565 seedede ingredienser har `isVerified: true` og `isOfficial: true`, men ingen `allergenIds` (kilden har ikke allergendata) — allergenfilteret er derfor ikke pålitelig ennå.
+- Alle 1 565 seedede ingredienser har `isVerified: true` og `isOfficial: true`, men ingen `allergenIds` (kilden har ikke allergendata) og `allergensReviewed: false` — allergenfilteret er derfor ikke pålitelig ennå.
 - **`isOfficial`** er `true` kun for Matvaretabellen-seeden. Tildeles av serveren; kan aldri settes eller endres via `POST`/`PUT` (et forsøk ignoreres stille — feltet finnes ikke i `IngredientRequest`). Se «Skriving» under for hva låsen betyr.
-- **`updatedAt`** brukes til optimistisk samtidighetskontroll, se under.
+- **`updatedAt`** brukes til optimistisk samtidighetskontroll, se under. **`createdAt`** (2026-09-22) settes én gang ved opprettelse og endres aldri (samme mønster som `isOfficial` — ikke en parameter i `update_ingredient`).
+- **`allergensReviewed`** (2026-09-22, `false` som standard) skilles fra en tom `allergenIds`-liste: sistnevnte kan bety "ingen allergener" eller "ingen har sjekket ennå" — dette feltet gjør skillet eksplisitt. Settes av admin via `IngredientRequest` og er fritt redigerbart **selv på en offisiell ingrediens** (ikke omfattet av kildedatalåsen under).
+- **`usageCount`** (2026-09-22) telles fra oppskriftslinjer, varianter og løste ubekreftede ingredienser ved hver lesing, aldri lagret. En ingrediens med `usageCount > 0` kan ikke slettes.
 - `defaultUnitId` er valgt ut fra porsjonene (dl hvis den har dl-porsjon, ellers stk, ellers ss, ellers første porsjon, ellers gram) — kan derfor være `dl` også for egg, og da er også `primaryUnitTypeId` volum, ikke vekt (settes fra samme regel).
 
 **Skriving (admin)** — `IngredientRequest` (ingen id-er, ingen `isOfficial`; serveren tildeler id for ingrediensen og alle barn; `PUT` erstatter alle barn):
@@ -167,6 +181,7 @@ undergruppe er summen** (`Mettet`, `Enumet`, `Flerum`, `Vit A`), resten er delve
   "energyKj": 147, "ediblePartPercent": 85, "sourceId": null, "sourceUrl": null,
   "variantOfIngredientId": null,                     // sett for en variant av en annen ingrediens (klienten forhåndsutfyller data fra basen)
   "isVerified": false, "allergenIds": [], "searchKeywordIds": [],
+  "allergensReviewed": false,                        // fritt redigerbar - også på en offisiell ingrediens, se under
   "updatedAt": "2026-09-22T19:47:52.629097+00:00",   // valgfri, kun PUT: verdien fra klientens siste GET (se «Samtidighet» under)
   "nutrientValues": [ { "nutrientDefinitionId": "Fett", "quantity": 0.2, "sourceId": null } ],   // quantity ≥ 0, ett per stoff, ingen duplikater
   "portions": [ { "unitId": "<stk>", "gramsPerPortion": 90 } ] }                                  // gramsPerPortion > 0, ingen to porsjoner for samme enhet
@@ -178,11 +193,11 @@ undergruppe er summen** (`Mettet`, `Enumet`, `Flerum`, `Vit A`), resten er delve
 - **`variantOfIngredientId`:** må finnes (`"Basisingrediensen finnes ikke."`), kan ikke være ingrediensen selv (`"En ingrediens kan ikke være en variant av seg selv."`), og variantkjeden kan ikke danne en løkke (`"Variantkjeden danner en løkke."`).
 
 **Offisielle ingredienser (`isOfficial: true`) — kildedata er låst.** `PUT` avvises med `400`, `detail`: **"Offisielle ingredienser kan ikke endre kildedata. Opprett en variant."**, hvis noe av dette avviker fra det lagrede (etter normalisering): `name`, `energyKcal`, `energyKj`, `ediblePartPercent`, `sourceId`, `sourceUrl`, eller **settet** av næringsverdier
-(`{nutrientDefinitionId, quantity, sourceId}` sammenlignet uavhengig av rad-id og rekkefølge — å sende dem i annen rekkefølge med nye id-er er altså greit). Fritt redigerbart uansett: `categoryId`, `primaryUnitTypeId`, `defaultUnitId`, `allergenIds`, `searchKeywordIds`, `portions`, `isVerified`. `variantOfIngredientId` kan ikke settes på en offisiell ingrediens (den er aldri en variant). `POST` setter alltid `isOfficial = false`, uansett hva klienten sender. `DELETE` av en offisiell ingrediens er fortsatt lov når den ikke er i bruk.
+(`{nutrientDefinitionId, quantity, sourceId}` sammenlignet uavhengig av rad-id og rekkefølge — å sende dem i annen rekkefølge med nye id-er er altså greit). Fritt redigerbart uansett: `categoryId`, `primaryUnitTypeId`, `defaultUnitId`, `allergenIds`, `searchKeywordIds`, `portions`, `isVerified`, `allergensReviewed`. `variantOfIngredientId` kan ikke settes på en offisiell ingrediens (den er aldri en variant). `POST` setter alltid `isOfficial = false`, uansett hva klienten sender. `DELETE` av en offisiell ingrediens er fortsatt lov når den ikke er i bruk.
 
 **Samtidighet (optimistisk):** send `updatedAt` fra siste `GET` tilbake i `PUT`-body. Er den eldre enn det som er lagret → `409`, `detail`: **"Ingrediensen er endret av noen andre siden du åpnet den. Last den på nytt."** Utelates feltet, gjøres ingen sjekk (bakoverkompatibelt).
 
-`409` ved eksisterende navn eller kilde-id. `DELETE` → `409` hvis ingrediensen brukes av en oppskrift, en variant eller en ubekreftet ingrediens.
+`409` ved eksisterende navn eller kilde-id. `DELETE` → `404` hvis ingrediensen ikke finnes, `409` `"Brukes fortsatt ({n} referanser) og kan ikke slettes."` hvis den brukes av en oppskrift, en variant eller en ubekreftet ingrediens.
 
 ## 5. Ubekreftede ingredienser
 

@@ -21,7 +21,8 @@ public class CreateIngredientCommandHandler(DbWriter<Ingredient> writer, ICacheS
             return Result<Ingredient>.Invalid(fkError);
 
         // isOfficial er alltid false her - kun seed-data er offisiell (se seed_10..25 og Documentation/06).
-        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, Guid.CreateVersion7(), isOfficial: false, timeProvider.GetUtcNow());
+        var now = timeProvider.GetUtcNow();
+        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, Guid.CreateVersion7(), isOfficial: false, now, createdAt: now);
         await writer.AddAsync(ingredient);
         cache.Remove(CatalogCacheKey.ForAll<IngredientListItem>());
 

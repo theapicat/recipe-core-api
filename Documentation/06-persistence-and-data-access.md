@@ -58,9 +58,10 @@ finnes **bare** når modellen trenger metoder utover malen.
   ingrediensen og barna skrives i **én transaksjon** (malen åpner ellers ny forbindelse per kall). Oppdatering
   erstatter barna (slett + sett inn). Delt SQL-logikk ligger i `IngredientPersistence` (internal). `is_official` er bevisst ikke en
   parameter i `update_ingredient` (kun i `insert_ingredient`) - kan derfor strukturelt ikke endres via oppdatering, selv om et
-  fremtidig skrivevei skulle glemme å beskytte det i C#. `updated_at` settes eksplisitt av handleren (ingen `DEFAULT`-avhengighet)
-  ved både opprettelse og oppdatering, til bruk i `IngredientMapper.ValidateOfficialLock`/samtidighetssjekken i
-  `UpdateIngredientCommandHandler` (`Documentation/08-api-reference.md`).
+  fremtidig skrivevei skulle glemme å beskytte det i C#. `created_at` er samme mønster (kun i `insert_ingredient`). `updated_at` og
+  `allergens_reviewed` settes eksplisitt av handleren (ingen `DEFAULT`-avhengighet) ved både opprettelse og oppdatering, til bruk i
+  `IngredientMapper.ValidateOfficialLock`/samtidighetssjekken i `UpdateIngredientCommandHandler` (`Documentation/08-api-reference.md`).
+  `usage_count` er ikke en kolonne i det hele tatt - se «Brukstelling og systemrader» under.
 - **`IngredientListItem`** — `IngredientListItemReader`, kun `GetAll` (lettvekts-liste til cachen).
 - **`UnconfirmedIngredient`** — egne grensesnitt i `Persistence/Interfaces/` (`IUnconfirmedIngredientReader`/
   `Writer`) siden den trenger spørringer per bruker/status, telling til grenser og statusendringer. Endrende metoder
@@ -86,6 +87,43 @@ Tabellene har `CHECK`: `servings > 0`, `cook_time_minutes >= 0`, `step_number > 
   forkortelsen, `unit_type_id`) og gruppen (`group_*` og `parent_group_*`) i én flat rad, og readeren
   (`NutrientDefinitionRow.ToNutrientDefinition`) bygger den om til `NutrientDefinition` med `Group` (og `Group.ParentGroup`)
   nøstet inni.
+
+### Brukstelling og systemrader (2026-09-22)
+
+De seks adminstyrte katalogene (`ingredient_category`, `allergen`, `search_keyword`, `unit_type`, `unit`,
+`recipe_category`) og `ingredient` har alle `Domain.IHasUsageMetadata`/en tilsvarende `UsageCount`-egenskap. Begge feltene
+er serverstyrte og kan ikke settes fra klienten - se «Sikring mot klientmanipulasjon» under.
+
+- **`is_system`** er en ekte `boolean NOT NULL DEFAULT false`-kolonne på de seks katalogtabellene. Seed-radene
+  (`seed_01`, `seed_04`, `seed_05`, `seed_06`) setter den til `true`; adminopprettede rader får `false` fra kolonnens
+  `DEFAULT` (kolonnen er aldri nevnt i `insert_<catalog>`/`update_<catalog>` sitt parameterlys).
+- **`usage_count` er ikke en kolonne noe sted** - den beregnes med en skalar-subquery per rad i
+  `get_all_<catalog>()`/`get_<catalog>_by_id()` (nå `RETURNS TABLE`, ikke `RETURNS SETOF <tabell>`) og i
+  `get_all_ingredient_list_item()`/`get_ingredient_by_id()`. Fremmednøkkel-kartet (hva som telles for hver tabell):
+
+  | Katalog | `usage_count` = |
+  | --- | --- |
+  | `ingredient_category` | `count(ingredient WHERE category_id = denne)` |
+  | `allergen` | `count(ingredient_allergen WHERE allergen_id = denne)` |
+  | `search_keyword` | `count(ingredient_search_keyword WHERE search_keyword_id = denne)` |
+  | `recipe_category` | `count(recipe WHERE category_id = denne)` |
+  | `unit_type` | `count(unit WHERE unit_type_id = denne) + count(ingredient WHERE primary_unit_type_id = denne)` |
+  | `unit` | `count(ingredient WHERE default_unit_id = denne) + count(ingredient_portion WHERE unit_id = denne) + count(recipe_ingredient WHERE unit_id = denne) + count(nutrient_definition WHERE unit_id = denne)` |
+  | `ingredient` | `count(recipe_ingredient WHERE ingredient_id = denne) + count(ingredient WHERE variant_of_ingredient_id = denne) + count(unconfirmed_ingredient WHERE resolved_ingredient_id = denne)` |
+
+  Telles ved hver lesing, ikke lagret eller cachet separat - lesingen går uansett gjennom den vanlige
+  katalog-/ingrediens-cachen (`ICacheService`), så en midlertidig unøyaktig telling har samme ferskhet som resten av
+  den cachede lista allerede har (ingen ny cache-invalideringsproblemstilling).
+- **Sikring mot klientmanipulasjon:** siden `insert_<catalog>`/`update_<catalog>` aldri refererer `@IsSystem`, og
+  `usage_count` ikke er en kolonne i det hele tatt, kan ingen av dem endres via skriving uansett hva klienten sender
+  (samme Dapper-triks som `ingredient.is_official`). `InsertCatalogCommandHandler` nullstiller i tillegg begge feltene
+  på entiteten rett etter id-tildeling, slik at en klient-oppgitt `isSystem: true`/`usageCount: 99` ikke engang blir
+  ekko-et tilbake i `201`-svaret (som sender entiteten direkte via `CreatedAtAction`).
+- **Sletting:** `DeleteCatalogCommandHandler<T,TKey>` (og `DeleteIngredientCommandHandler`) slår opp raden først - `404`
+  hvis den ikke finnes, `409` hvis `IsSystem` er `true` («Systemrader (fra seed-data) kan ikke slettes.») eller
+  `UsageCount > 0` («Brukes fortsatt ({n} referanser) og kan ikke slettes.»), ellers slettes raden og `204` returneres.
+  Tidligere ga katalog-`DELETE` alltid `204` uansett (ingen sjekk); ingrediens-`DELETE` stolte på en generisk FK-`409`
+  fra Postgres uten telling i meldingen.
 
 ---
 
@@ -117,8 +155,9 @@ Bygget så langt (alle for feature-gruppen oppskrifter/ingredienser/næring):
   næringsstoffer, `ingredient` med barn, `unconfirmed_ingredient`, oppskrifter).
 - `20000_recipes_ingredients_nutrition_queries.sql` — `get_all_*`/`get_*_by_id` for alle katalogtyper og
   ingrediens (inkl. `get_all_ingredient_list_item` med `array_agg`-kolonner og barnefunksjonene), samt per bruker/
-  status/telling for ubekreftede ingredienser. Read-funksjonene returnerer `SETOF <tabell>` (Postgres lager en
-  rad-type per tabell).
+  status/telling for ubekreftede ingredienser. De fleste read-funksjonene returnerer `SETOF <tabell>` (Postgres lager en
+  rad-type per tabell); de seks katalogtypene og `ingredient` bruker i stedet eksplisitt `RETURNS TABLE` for å kunne
+  folde inn en beregnet `usage_count`-kolonne (se «Brukstelling og systemrader» over).
 - `30000_recipes_ingredients_nutrition_commands.sql` — `insert_*`/`update_*`/`delete_*` for alle katalogtyper og
   ingrediens (raden + barnefunksjoner), og statusfunksjonene for ubekreftede ingredienser
   (`request_…_review`, `reject_…`, `resolve_…`). `delete_*` og statusfunksjonene returnerer antall berørte rader.
@@ -138,6 +177,9 @@ hvert **én gang** (journalført i `schemaversions`), og er skrevet idempotent (
 | `seed_06_recipe_categories` | 13 oppskriftskategorier. |
 | `seed_10`–`seed_25_ingredients_<kategori>` | 1565 ingredienser (én fil per kategori) med næringsverdier (88 754), porsjoner (2 463) og søkeord (326 unike, 1 306 koblinger). |
 
+`seed_01`, `04`, `05` og `06` setter `is_system = true` på alle radene sine (2026-09-22, se «Brukstelling og
+systemrader» over) - `search_keyword` har ingen seed-fil og starter tom, så ingenting å merke der.
+
 - **Små kataloger har faste id-er** (deterministiske UUIDv7-lignende, generert én gang), slik at senere skript kan referere
   til dem uten å slå opp på navn (navn kan endres av admin). Ingredienser, verdier og søkeord får id fra en midlertidig
   `pg_temp.seed_uuid_v7()` (Postgres 16 har ikke UUIDv7 innebygd) og kobles på Matvaretabellens matvare-id (`source_id`).
@@ -148,8 +190,10 @@ hvert **én gang** (journalført i `schemaversions`), og er skrevet idempotent (
   bevisst beholdt inntil videre: skillet mellom ingrediens og produkt er ikke avgjort ennå (se `todo.md`).
 - **Alle importerte ingredienser har `is_verified = true` og `is_official = true`** (2026-09-22: de er offisielle, ferdig
   næringsbelagte rader fra kilden - kun allergener mangler). `ingredient_allergen` er likevel tom (kilden har ingen allergendata), så
-  allergenfilteret kan ikke stoles på før allergener er tilordnet (planlagt, se `todo.md`). `is_official` låser kildedata mot endring
-  via `PUT` (`IngredientMapper.ValidateOfficialLock`) - se `Documentation/08-api-reference.md`.
+  allergenfilteret kan ikke stoles på før allergener er tilordnet - `allergens_reviewed` (2026-09-22, `DEFAULT false`) gjør dette
+  eksplisitt i stedet for å overlate det til en tom `allergenIds`-liste, og settes til `true` av admin når tilordningen er
+  verifisert komplett (fritt redigerbar selv om ingrediensen er offisiell, se `Documentation/08-api-reference.md`). `is_official`
+  låser kildedata mot endring via `PUT` (`IngredientMapper.ValidateOfficialLock`).
 - **Næringsverdier** er *per 100 g spiselig del* (Matvaretabellens konvensjon; `edible_part_percent` sier hvor stor del av
   matvaren som er spiselig), og sparsomme: kun målte verdier lagres (`0` = målt som null, manglende rad = ukjent).
 - Skriptene ble generert (2026-09-20) av et engangs hjelpescript fra Matvaretabellens rådata (`foods.json`, `nutrients.json`,

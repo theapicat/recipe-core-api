@@ -74,7 +74,8 @@ public class OwnUnconfirmedIngredientHandlersTests
                 new()
                 {
                     Id = Guid.NewGuid(), Name = "gulrot", CategoryId = Guid.NewGuid(), PrimaryUnitTypeId = Guid.NewGuid(),
-                    DefaultUnitId = Guid.NewGuid(), EnergyKcal = 30, IsVerified = true, IsOfficial = true, AllergenIds = [], SearchKeywordIds = []
+                    DefaultUnitId = Guid.NewGuid(), EnergyKcal = 30, IsVerified = true, IsOfficial = true,
+                    CreatedAt = DateTimeOffset.UtcNow, AllergensReviewed = false, UsageCount = 0, AllergenIds = [], SearchKeywordIds = []
                 }
             });
 

@@ -84,6 +84,6 @@ public static class CatalogExtensions
         services.AddScoped(
             typeof(IRequestHandler<,>).MakeGenericType(
                 typeof(DeleteCatalogCommand<,>).MakeGenericType(entity, key),
-                typeof(bool)),
+                typeof(Result)),
             typeof(DeleteCatalogCommandHandler<,>).MakeGenericType(entity, key));
 }

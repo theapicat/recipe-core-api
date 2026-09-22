@@ -60,8 +60,11 @@ public static class IngredientMapper
     }
 
     // Tildeler id til ingrediensen og alle barna (UUIDv7). Allergen-/nøkkelord-id-er dedupliseres siden
-    // koblingstabellene har sammensatt primærnøkkel. isOfficial og updatedAt avgjøres av kalleren (aldri av request-body).
-    public static Ingredient ToIngredient(IngredientRequest request, Guid id, bool isOfficial, DateTimeOffset updatedAt) => new()
+    // koblingstabellene har sammensatt primærnøkkel. isOfficial, updatedAt og createdAt avgjøres av kalleren
+    // (aldri av request-body) - createdAt er now() ved opprettelse, videreført fra existing.CreatedAt ved oppdatering.
+    // UsageCount settes alltid til 0: beregnes kun ved lesing (get_ingredient_by_id), aldri lagret eller skrevet.
+    public static Ingredient ToIngredient(
+        IngredientRequest request, Guid id, bool isOfficial, DateTimeOffset updatedAt, DateTimeOffset createdAt) => new()
     {
         Id = id,
         Name = NameNormalizer.Normalize(request.Name),
@@ -77,6 +80,9 @@ public static class IngredientMapper
         IsVerified = request.IsVerified,
         IsOfficial = isOfficial,
         UpdatedAt = updatedAt,
+        CreatedAt = createdAt,
+        AllergensReviewed = request.AllergensReviewed,
+        UsageCount = 0,
         AllergenIds = request.AllergenIds.Distinct().ToList(),
         SearchKeywordIds = request.SearchKeywordIds.Distinct().ToList(),
         NutrientValues = request.NutrientValues

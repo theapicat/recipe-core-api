@@ -18,6 +18,15 @@ public class InsertCatalogCommandHandler<T, TKey>(DbWriter<T> writer, ICacheServ
         if (request.Entity is IHasId<Guid> guidEntity)
             guidEntity.Id = Guid.CreateVersion7();
 
+        // Serverstyrt, uansett hva klienten sendte - se IHasUsageMetadata. Uten denne nullstillingen ville en
+        // klient-oppgitt isSystem/usageCount blitt ekko-et tilbake i 201-svaret (CreatedAtAction under sender
+        // request.Entity), selv om selve raden alltid får is_system = false fra kolonnens DEFAULT.
+        if (request.Entity is IHasUsageMetadata usageEntity)
+        {
+            usageEntity.IsSystem = false;
+            usageEntity.UsageCount = 0;
+        }
+
         CatalogNormalization.Apply(request.Entity);
         await writer.AddAsync(request.Entity);
         cache.Remove(CatalogCacheKey.ForAll<T>());

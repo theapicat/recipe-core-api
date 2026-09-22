@@ -20,6 +20,10 @@ public record IngredientRequest
 
     public bool IsVerified { get; init; }
 
+    // Satt av admin når allergen-tilordningen er verifisert komplett/korrekt. Fritt redigerbar selv om ingrediensen
+    // er offisiell - se IngredientMapper.ValidateOfficialLock.
+    public bool AllergensReviewed { get; init; }
+
     // Sendes tilbake fra klientens siste GET for optimistisk samtidighetskontroll. Utelatt = ingen sjekk (bakoverkompatibelt).
     public DateTimeOffset? UpdatedAt { get; init; }
 

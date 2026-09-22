@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 public abstract class ReadWriteCatalogController<T, TKey>(IMediator mediator) : ReadCatalogController<T, TKey>(mediator)
-    where T : IHasId<TKey>
+    where T : IHasId<TKey>, IHasUsageMetadata
 {
     // Serveren tildeler id for Guid-nøkler (klientens id ignoreres). Svaret er 201 med den opprettede raden og en
     // Location-header, så klienten alltid får id-en tilbake. Virtual slik at en konkret kontroller (f.eks. enheter) kan
@@ -32,8 +32,8 @@ public abstract class ReadWriteCatalogController<T, TKey>(IMediator mediator) : 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(TKey id, CancellationToken cancellationToken)
     {
-        await Mediator.Send(new DeleteCatalogCommand<T, TKey>(id), cancellationToken);
-        return NoContent();
+        var result = await Mediator.Send(new DeleteCatalogCommand<T, TKey>(id), cancellationToken);
+        return this.ToActionResult(result, NoContent);
     }
 
     private static bool IsMissing(TKey id) =>
@@ -42,4 +42,4 @@ public abstract class ReadWriteCatalogController<T, TKey>(IMediator mediator) : 
 
 // Snarvei for det vanlige tilfellet: Guid-nøkkel.
 public abstract class ReadWriteCatalogController<T>(IMediator mediator) : ReadWriteCatalogController<T, Guid>(mediator)
-    where T : IHasId<Guid>;
+    where T : IHasId<Guid>, IHasUsageMetadata;

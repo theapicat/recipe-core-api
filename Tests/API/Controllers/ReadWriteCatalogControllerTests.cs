@@ -15,9 +15,11 @@ namespace Tests.API.Controllers;
 
 public class ReadWriteCatalogControllerTests
 {
-    private class TextKeyEntity : IHasId<string>
+    private class TextKeyEntity : IHasId<string>, IHasUsageMetadata
     {
         public required string Id { get; set; }
+        public bool IsSystem { get; set; }
+        public int UsageCount { get; set; }
     }
 
     private class TextKeyController(IMediator mediator) : ReadWriteCatalogController<TextKeyEntity, string>(mediator);
@@ -120,11 +122,37 @@ public class ReadWriteCatalogControllerTests
     public async Task Delete_ReturnsNoContent()
     {
         var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<DeleteCatalogCommand<Allergen, Guid>>(), Arg.Any<CancellationToken>()).Returns(true);
+        mediator.Send(Arg.Any<DeleteCatalogCommand<Allergen, Guid>>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         var controller = new AdminAllergenController(mediator);
 
         var result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task Delete_ReturnsNotFound_WhenTheRowDoesNotExist()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<DeleteCatalogCommand<Allergen, Guid>>(), Arg.Any<CancellationToken>()).Returns(Result.NotFound());
+        var controller = new AdminAllergenController(mediator);
+
+        var result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task Delete_ReturnsConflict_WhenTheRowIsSystemOrInUse()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<DeleteCatalogCommand<Allergen, Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Conflict("Systemrader (fra seed-data) kan ikke slettes."));
+        var controller = AllergenController(mediator);
+
+        var result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
     }
 }

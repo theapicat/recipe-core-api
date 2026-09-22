@@ -97,6 +97,19 @@ public class InsertCatalogCommandHandlerTests
         Assert.Equal("mg-ATE", writer.Inserted.Abbreviation);
     }
 
+    [Fact]
+    public async Task Handle_ResetsIsSystemAndUsageCount_IgnoringWhatTheClientSent()
+    {
+        var entity = new IngredientCategory { Name = "Nøtter", IsSystem = true, UsageCount = 42 };
+        var writer = new RecordingWriter<IngredientCategory>();
+        var handler = new InsertCatalogCommandHandler<IngredientCategory, Guid>(writer, Substitute.For<ICacheService>(), UnusedMediator());
+
+        await handler.Handle(new InsertCatalogCommand<IngredientCategory, Guid>(entity), CancellationToken.None);
+
+        Assert.False(writer.Inserted!.IsSystem);
+        Assert.Equal(0, writer.Inserted.UsageCount);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

@@ -68,7 +68,7 @@ public class AdminUnconfirmedIngredientHandlersTests
         _writer.ResolveAsync(default, default, default, default, default).ReturnsForAnyArgs(true);
         var baseId = Guid.NewGuid();
         _mediator.Send(Arg.Is<GetCatalogByIdQuery<Ingredient, Guid>>(q => q.Id == baseId), Arg.Any<CancellationToken>())
-            .Returns(IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), baseId, isOfficial: false, DateTimeOffset.UtcNow));
+            .Returns(IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), baseId, isOfficial: false, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
 
         var result = await ApproveHandler().Handle(
             new ApproveUnconfirmedIngredientCommand(stub.Id, IngredientTestData.ValidRequest() with { VariantOfIngredientId = baseId }),
@@ -110,7 +110,7 @@ public class AdminUnconfirmedIngredientHandlersTests
     public async Task Merge_ResolvesAsMergedWithoutCreatingAnIngredient()
     {
         var stub = PendingStub();
-        var target = IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), Guid.NewGuid(), isOfficial: false, DateTimeOffset.UtcNow);
+        var target = IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), Guid.NewGuid(), isOfficial: false, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
         _writer.ResolveAsync(default, default, default, default, default).ReturnsForAnyArgs(true);
         var handler = new MergeUnconfirmedIngredientCommandHandler(_reader, _writer, new FakeIngredientReader(target), TimeProvider.System);
 

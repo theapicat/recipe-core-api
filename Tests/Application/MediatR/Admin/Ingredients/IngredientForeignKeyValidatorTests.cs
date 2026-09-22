@@ -169,7 +169,7 @@ public class IngredientForeignKeyValidatorTests
     {
         var mediator = IngredientTestData.PassthroughMediator();
         var baseId = Guid.NewGuid();
-        var baseIngredient = IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), baseId, isOfficial: true, DateTimeOffset.UtcNow);
+        var baseIngredient = IngredientMapper.ToIngredient(IngredientTestData.ValidRequest(), baseId, isOfficial: true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
         mediator.Send(Arg.Is<GetCatalogByIdQuery<Ingredient, Guid>>(q => q.Id == baseId), Arg.Any<CancellationToken>())
             .Returns(baseIngredient);
         var request = IngredientTestData.ValidRequest() with { VariantOfIngredientId = baseId };
@@ -185,7 +185,7 @@ public class IngredientForeignKeyValidatorTests
         var baseId = Guid.NewGuid();
         // baseId -> ownId -> baseId: en løkke som ikke går via selvreferanse-sjekken direkte.
         var baseIngredient = IngredientMapper.ToIngredient(
-            IngredientTestData.ValidRequest() with { VariantOfIngredientId = ownId }, baseId, isOfficial: false, DateTimeOffset.UtcNow);
+            IngredientTestData.ValidRequest() with { VariantOfIngredientId = ownId }, baseId, isOfficial: false, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
         mediator.Send(Arg.Is<GetCatalogByIdQuery<Ingredient, Guid>>(q => q.Id == baseId), Arg.Any<CancellationToken>())
             .Returns(baseIngredient);
         var request = IngredientTestData.ValidRequest() with { VariantOfIngredientId = baseId };

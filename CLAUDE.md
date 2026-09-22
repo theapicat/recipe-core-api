@@ -17,7 +17,7 @@ unconfirmed-ingredient requests) and JWT auth are built end-to-end; recipes (CRU
 dotnet build                          # build the whole solution
 dotnet run --project API              # run the API (http://localhost:5002, see API/Properties/launchSettings.json)
 dotnet watch --project API run        # run with hot reload
-dotnet test Tests/Tests.csproj        # run unit tests (264 tests, no external dependencies needed)
+dotnet test Tests/Tests.csproj        # run unit tests (273 tests, no external dependencies needed)
 ```
 
 Local dependencies (Postgres, RabbitMQ, Seq) are expected to run externally (e.g. via the platform's
@@ -105,6 +105,12 @@ the app throws at startup if any is missing.
   `IsVerified` stay editable. `Ingredient.UpdatedAt` backs optimistic concurrency on `PUT` (`IngredientRequest.UpdatedAt`, `409` on a
   stale value). `IngredientForeignKeyValidator` checks every referenced id (category/unit type/unit/allergen/keyword/nutrient/variant)
   exists before writing, with a specific `400` per case instead of a generic FK `409`. See `Documentation/08-api-reference.md`.
+- `Domain.IHasUsageMetadata` (`IsSystem`, `UsageCount`) is implemented by the six admin-managed catalog models. `IsSystem` (`true` for
+  seed rows) and `UsageCount` (computed at read time from the FK map in `Documentation/06-persistence-and-data-access.md`, never stored)
+  are never referenced in `insert_<catalog>`/`update_<catalog>` SQL, so a client can't set/change them; `DeleteCatalogCommandHandler`
+  refuses to delete a system row or a row still in use (`409` with a specific message) instead of the previous unconditional `204`.
+  `Ingredient`/`IngredientListItem` carry the same `UsageCount` idea (not `IsSystem`) plus `CreatedAt` (set once, immutable like
+  `IsOfficial`) and `AllergensReviewed` (freely editable even on an official ingredient — deliberately outside `ValidateOfficialLock`).
 
 ## Tech stack
 

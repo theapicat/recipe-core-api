@@ -36,8 +36,9 @@ public class UpdateIngredientCommandHandler(
         if (fkError is not null)
             return Result<Ingredient>.Invalid(fkError);
 
-        // IsOfficial videreføres fra den lagrede raden - kan aldri settes/endres via body.
-        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, request.Id, existing.IsOfficial, timeProvider.GetUtcNow());
+        // IsOfficial og CreatedAt videreføres fra den lagrede raden - kan aldri settes/endres via body.
+        var ingredient = IngredientMapper.ToIngredient(
+            request.Ingredient, request.Id, existing.IsOfficial, timeProvider.GetUtcNow(), createdAt: existing.CreatedAt);
         await writer.UpdateAsync(ingredient);
         cache.Remove(CatalogCacheKey.ForAll<IngredientListItem>());
 

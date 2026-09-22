@@ -7,14 +7,21 @@ using Persistence.Services;
 
 namespace Application.MediatR.Admin.Ingredients;
 
-public class DeleteIngredientCommandHandler(DbWriter<Ingredient> writer, ICacheService cache)
+public class DeleteIngredientCommandHandler(DbReader<Ingredient> reader, DbWriter<Ingredient> writer, ICacheService cache)
     : IRequestHandler<DeleteIngredientCommand, Result>
 {
     public async Task<Result> Handle(DeleteIngredientCommand request, CancellationToken cancellationToken)
     {
-        var affectedRows = await writer.DeleteAsync(request.Id);
+        var existing = await reader.GetByIdAsync(request.Id);
+        if (existing is null)
+            return Result.NotFound();
+
+        if (existing.UsageCount > 0)
+            return Result.Conflict($"Brukes fortsatt ({existing.UsageCount} referanser) og kan ikke slettes.");
+
+        await writer.DeleteAsync(request.Id);
         cache.Remove(CatalogCacheKey.ForAll<IngredientListItem>());
 
-        return affectedRows > 0 ? Result.Success() : Result.NotFound();
+        return Result.Success();
     }
 }

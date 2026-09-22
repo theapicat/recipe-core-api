@@ -34,10 +34,11 @@ public class ApproveUnconfirmedIngredientCommandHandler(
             return Result<Ingredient>.Invalid(fkError);
 
         // Godkjent fra en brukers ubekreftede ingrediens - ikke offisiell (det er forbeholdt Matvaretabellen-seeden).
-        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, Guid.CreateVersion7(), isOfficial: false, timeProvider.GetUtcNow());
+        var now = timeProvider.GetUtcNow();
+        var ingredient = IngredientMapper.ToIngredient(request.Ingredient, Guid.CreateVersion7(), isOfficial: false, now, createdAt: now);
 
         var resolved = await writer.ResolveAsync(
-            stub.Id, UnconfirmedIngredientStatus.Approved, ingredient.Id, ingredient, timeProvider.GetUtcNow());
+            stub.Id, UnconfirmedIngredientStatus.Approved, ingredient.Id, ingredient, now);
         if (!resolved)
             return Result<Ingredient>.Conflict("Forespørselen er ikke lenger ventende.");
 

@@ -16,6 +16,12 @@ public class IngredientListItem
     // true kun for rader fra den offisielle kilden (Matvaretabellen-seeden) - se Ingredient.IsOfficial.
     public required bool IsOfficial { get; set; }
 
+    public required DateTimeOffset CreatedAt { get; set; }
+    public required bool AllergensReviewed { get; set; }
+
+    // Beregnet ved lesing - se Ingredient.UsageCount.
+    public required int UsageCount { get; set; }
+
     public Guid? VariantOfIngredientId { get; set; }
     public required Guid[] AllergenIds { get; set; }
     public required Guid[] SearchKeywordIds { get; set; }

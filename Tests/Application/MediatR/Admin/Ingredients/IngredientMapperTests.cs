@@ -164,7 +164,7 @@ public class IngredientMapperTests
             SourceId = "06.010", SourceUrl = "https://www.matvaretabellen.no/agurk-ra/",
             NutrientValues = [new IngredientNutrientValueRequest { NutrientDefinitionId = "Fett", Quantity = 0.1m, SourceId = "10" }]
         },
-        Guid.NewGuid(), isOfficial: true, DateTimeOffset.UtcNow);
+        Guid.NewGuid(), isOfficial: true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 
     [Fact]
     public void ValidateOfficialLock_AllowsAnUnchangedRequest()
@@ -209,6 +209,20 @@ public class IngredientMapperTests
     }
 
     [Fact]
+    public void ValidateOfficialLock_AllowsChangingAllergensReviewed()
+    {
+        var existing = ExistingOfficial();
+        var request = IngredientTestData.ValidRequest() with
+        {
+            SourceId = existing.SourceId, SourceUrl = existing.SourceUrl,
+            NutrientValues = [new IngredientNutrientValueRequest { NutrientDefinitionId = "Fett", Quantity = 0.1m, SourceId = "10" }],
+            AllergensReviewed = true
+        };
+
+        Assert.Null(IngredientMapper.ValidateOfficialLock(existing, request));
+    }
+
+    [Fact]
     public void ValidateOfficialLock_AllowsResendingNutrientValuesInADifferentOrderWithNewRowIds()
     {
         var existing = IngredientMapper.ToIngredient(
@@ -220,7 +234,7 @@ public class IngredientMapperTests
                     new IngredientNutrientValueRequest { NutrientDefinitionId = "Vann", Quantity = 2 }
                 ]
             },
-            Guid.NewGuid(), isOfficial: true, DateTimeOffset.UtcNow);
+            Guid.NewGuid(), isOfficial: true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
         var request = IngredientTestData.ValidRequest() with
         {
             NutrientValues =
@@ -322,7 +336,7 @@ public class IngredientMapperTests
         };
         var id = Guid.NewGuid();
 
-        var ingredient = IngredientMapper.ToIngredient(request, id, isOfficial: false, DateTimeOffset.UtcNow);
+        var ingredient = IngredientMapper.ToIngredient(request, id, isOfficial: false, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 
         Assert.Equal(id, ingredient.Id);
         Assert.Equal("agurk", ingredient.Name);

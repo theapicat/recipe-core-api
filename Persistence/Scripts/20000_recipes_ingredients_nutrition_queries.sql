@@ -9,18 +9,26 @@
 -- ingredient_category
 -- =========================================================================
 
+-- usage_count telles ikke, den beregnes ved hvert lesekall (se Documentation/06 for hele fremmednøkkel-kartet) -
+-- katalogene caches uansett (GetAllCatalogQuery), så kostnaden er lav og verdien alltid fersk.
 CREATE OR REPLACE FUNCTION get_all_ingredient_category()
-RETURNS SETOF ingredient_category
+RETURNS TABLE (id uuid, name text, is_system boolean, usage_count integer)
 LANGUAGE sql
 AS $$
-    SELECT * FROM ingredient_category ORDER BY name;
+    SELECT c.id, c.name, c.is_system,
+           (SELECT count(*)::integer FROM ingredient i WHERE i.category_id = c.id)
+    FROM ingredient_category c
+    ORDER BY c.name;
 $$;
 
 CREATE OR REPLACE FUNCTION get_ingredient_category_by_id(p_id uuid)
-RETURNS SETOF ingredient_category
+RETURNS TABLE (id uuid, name text, is_system boolean, usage_count integer)
 LANGUAGE sql
 AS $$
-    SELECT * FROM ingredient_category WHERE id = p_id;
+    SELECT c.id, c.name, c.is_system,
+           (SELECT count(*)::integer FROM ingredient i WHERE i.category_id = c.id)
+    FROM ingredient_category c
+    WHERE c.id = p_id;
 $$;
 
 -- =========================================================================
@@ -28,17 +36,23 @@ $$;
 -- =========================================================================
 
 CREATE OR REPLACE FUNCTION get_all_allergen()
-RETURNS SETOF allergen
+RETURNS TABLE (id uuid, name text, is_system boolean, usage_count integer)
 LANGUAGE sql
 AS $$
-    SELECT * FROM allergen ORDER BY name;
+    SELECT a.id, a.name, a.is_system,
+           (SELECT count(*)::integer FROM ingredient_allergen ia WHERE ia.allergen_id = a.id)
+    FROM allergen a
+    ORDER BY a.name;
 $$;
 
 CREATE OR REPLACE FUNCTION get_allergen_by_id(p_id uuid)
-RETURNS SETOF allergen
+RETURNS TABLE (id uuid, name text, is_system boolean, usage_count integer)
 LANGUAGE sql
 AS $$
-    SELECT * FROM allergen WHERE id = p_id;
+    SELECT a.id, a.name, a.is_system,
+           (SELECT count(*)::integer FROM ingredient_allergen ia WHERE ia.allergen_id = a.id)
+    FROM allergen a
+    WHERE a.id = p_id;
 $$;
 
 -- =========================================================================
@@ -46,17 +60,23 @@ $$;
 -- =========================================================================
 
 CREATE OR REPLACE FUNCTION get_all_search_keyword()
-RETURNS SETOF search_keyword
+RETURNS TABLE (id uuid, name text, is_system boolean, usage_count integer)
 LANGUAGE sql
 AS $$
-    SELECT * FROM search_keyword ORDER BY name;
+    SELECT k.id, k.name, k.is_system,
+           (SELECT count(*)::integer FROM ingredient_search_keyword isk WHERE isk.search_keyword_id = k.id)
+    FROM search_keyword k
+    ORDER BY k.name;
 $$;
 
 CREATE OR REPLACE FUNCTION get_search_keyword_by_id(p_id uuid)
-RETURNS SETOF search_keyword
+RETURNS TABLE (id uuid, name text, is_system boolean, usage_count integer)
 LANGUAGE sql
 AS $$
-    SELECT * FROM search_keyword WHERE id = p_id;
+    SELECT k.id, k.name, k.is_system,
+           (SELECT count(*)::integer FROM ingredient_search_keyword isk WHERE isk.search_keyword_id = k.id)
+    FROM search_keyword k
+    WHERE k.id = p_id;
 $$;
 
 -- =========================================================================
@@ -64,17 +84,25 @@ $$;
 -- =========================================================================
 
 CREATE OR REPLACE FUNCTION get_all_unit_type()
-RETURNS SETOF unit_type
+RETURNS TABLE (id uuid, name text, is_system boolean, usage_count integer)
 LANGUAGE sql
 AS $$
-    SELECT * FROM unit_type ORDER BY name;
+    SELECT t.id, t.name, t.is_system,
+           (SELECT count(*)::integer FROM unit u WHERE u.unit_type_id = t.id) +
+           (SELECT count(*)::integer FROM ingredient i WHERE i.primary_unit_type_id = t.id)
+    FROM unit_type t
+    ORDER BY t.name;
 $$;
 
 CREATE OR REPLACE FUNCTION get_unit_type_by_id(p_id uuid)
-RETURNS SETOF unit_type
+RETURNS TABLE (id uuid, name text, is_system boolean, usage_count integer)
 LANGUAGE sql
 AS $$
-    SELECT * FROM unit_type WHERE id = p_id;
+    SELECT t.id, t.name, t.is_system,
+           (SELECT count(*)::integer FROM unit u WHERE u.unit_type_id = t.id) +
+           (SELECT count(*)::integer FROM ingredient i WHERE i.primary_unit_type_id = t.id)
+    FROM unit_type t
+    WHERE t.id = p_id;
 $$;
 
 -- =========================================================================
@@ -82,17 +110,35 @@ $$;
 -- =========================================================================
 
 CREATE OR REPLACE FUNCTION get_all_unit()
-RETURNS SETOF unit
+RETURNS TABLE (
+    id uuid, name text, abbreviation text, unit_type_id uuid, base_unit_ratio numeric,
+    is_system boolean, usage_count integer
+)
 LANGUAGE sql
 AS $$
-    SELECT * FROM unit ORDER BY name;
+    SELECT u.id, u.name, u.abbreviation, u.unit_type_id, u.base_unit_ratio, u.is_system,
+           (SELECT count(*)::integer FROM ingredient i WHERE i.default_unit_id = u.id) +
+           (SELECT count(*)::integer FROM ingredient_portion p WHERE p.unit_id = u.id) +
+           (SELECT count(*)::integer FROM recipe_ingredient ri WHERE ri.unit_id = u.id) +
+           (SELECT count(*)::integer FROM nutrient_definition n WHERE n.unit_id = u.id)
+    FROM unit u
+    ORDER BY u.name;
 $$;
 
 CREATE OR REPLACE FUNCTION get_unit_by_id(p_id uuid)
-RETURNS SETOF unit
+RETURNS TABLE (
+    id uuid, name text, abbreviation text, unit_type_id uuid, base_unit_ratio numeric,
+    is_system boolean, usage_count integer
+)
 LANGUAGE sql
 AS $$
-    SELECT * FROM unit WHERE id = p_id;
+    SELECT u.id, u.name, u.abbreviation, u.unit_type_id, u.base_unit_ratio, u.is_system,
+           (SELECT count(*)::integer FROM ingredient i WHERE i.default_unit_id = u.id) +
+           (SELECT count(*)::integer FROM ingredient_portion p WHERE p.unit_id = u.id) +
+           (SELECT count(*)::integer FROM recipe_ingredient ri WHERE ri.unit_id = u.id) +
+           (SELECT count(*)::integer FROM nutrient_definition n WHERE n.unit_id = u.id)
+    FROM unit u
+    WHERE u.id = p_id;
 $$;
 
 -- =========================================================================
@@ -100,17 +146,23 @@ $$;
 -- =========================================================================
 
 CREATE OR REPLACE FUNCTION get_all_recipe_category()
-RETURNS SETOF recipe_category
+RETURNS TABLE (id uuid, name text, is_system boolean, usage_count integer)
 LANGUAGE sql
 AS $$
-    SELECT * FROM recipe_category ORDER BY name;
+    SELECT c.id, c.name, c.is_system,
+           (SELECT count(*)::integer FROM recipe r WHERE r.category_id = c.id)
+    FROM recipe_category c
+    ORDER BY c.name;
 $$;
 
 CREATE OR REPLACE FUNCTION get_recipe_category_by_id(p_id uuid)
-RETURNS SETOF recipe_category
+RETURNS TABLE (id uuid, name text, is_system boolean, usage_count integer)
 LANGUAGE sql
 AS $$
-    SELECT * FROM recipe_category WHERE id = p_id;
+    SELECT c.id, c.name, c.is_system,
+           (SELECT count(*)::integer FROM recipe r WHERE r.category_id = c.id)
+    FROM recipe_category c
+    WHERE c.id = p_id;
 $$;
 
 -- =========================================================================
@@ -173,6 +225,9 @@ RETURNS TABLE (
     energy_kcal              numeric,
     is_verified              boolean,
     is_official              boolean,
+    created_at               timestamptz,
+    allergens_reviewed       boolean,
+    usage_count              integer,
     variant_of_ingredient_id uuid,
     allergen_ids             uuid[],
     search_keyword_ids       uuid[]
@@ -187,6 +242,11 @@ AS $$
            i.energy_kcal,
            i.is_verified,
            i.is_official,
+           i.created_at,
+           i.allergens_reviewed,
+           (SELECT count(*)::integer FROM recipe_ingredient ri WHERE ri.ingredient_id = i.id) +
+           (SELECT count(*)::integer FROM ingredient v WHERE v.variant_of_ingredient_id = i.id) +
+           (SELECT count(*)::integer FROM unconfirmed_ingredient u WHERE u.resolved_ingredient_id = i.id),
            i.variant_of_ingredient_id,
            COALESCE((SELECT array_agg(ia.allergen_id) FROM ingredient_allergen ia WHERE ia.ingredient_id = i.id), '{}'::uuid[]),
            COALESCE((SELECT array_agg(isk.search_keyword_id) FROM ingredient_search_keyword isk WHERE isk.ingredient_id = i.id), '{}'::uuid[])
@@ -194,12 +254,38 @@ AS $$
     ORDER BY i.name;
 $$;
 
--- Selve raden. Barna hentes med funksjonene under, i ett kall fra Persistence.
+-- Selve raden, med usage_count beregnet på samme måte som listefunksjonen over - se Documentation/06 for
+-- fremmednøkkel-kartet. Barna hentes med funksjonene under, i ett kall fra Persistence.
 CREATE OR REPLACE FUNCTION get_ingredient_by_id(p_id uuid)
-RETURNS SETOF ingredient
+RETURNS TABLE (
+    id                       uuid,
+    name                     text,
+    category_id              uuid,
+    primary_unit_type_id     uuid,
+    default_unit_id          uuid,
+    energy_kcal              numeric,
+    energy_kj                numeric,
+    edible_part_percent      numeric,
+    source_id                text,
+    source_url               text,
+    variant_of_ingredient_id uuid,
+    is_verified              boolean,
+    is_official              boolean,
+    updated_at               timestamptz,
+    created_at               timestamptz,
+    allergens_reviewed       boolean,
+    usage_count              integer
+)
 LANGUAGE sql
 AS $$
-    SELECT * FROM ingredient WHERE id = p_id;
+    SELECT i.id, i.name, i.category_id, i.primary_unit_type_id, i.default_unit_id, i.energy_kcal, i.energy_kj,
+           i.edible_part_percent, i.source_id, i.source_url, i.variant_of_ingredient_id, i.is_verified,
+           i.is_official, i.updated_at, i.created_at, i.allergens_reviewed,
+           (SELECT count(*)::integer FROM recipe_ingredient ri WHERE ri.ingredient_id = i.id) +
+           (SELECT count(*)::integer FROM ingredient v WHERE v.variant_of_ingredient_id = i.id) +
+           (SELECT count(*)::integer FROM unconfirmed_ingredient u WHERE u.resolved_ingredient_id = i.id)
+    FROM ingredient i
+    WHERE i.id = p_id;
 $$;
 
 CREATE OR REPLACE FUNCTION get_ingredient_allergen_ids(p_ingredient_id uuid)

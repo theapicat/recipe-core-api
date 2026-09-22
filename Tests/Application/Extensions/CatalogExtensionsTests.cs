@@ -45,7 +45,7 @@ public class CatalogExtensionsTests
         Assert.Contains(services, sd => sd.ServiceType == Handler(
             typeof(UpdateCatalogCommand<>).MakeGenericType(entity), typeof(Result)));
         Assert.Contains(services, sd => sd.ServiceType == Handler(
-            typeof(DeleteCatalogCommand<,>).MakeGenericType(entity, key), typeof(bool)));
+            typeof(DeleteCatalogCommand<,>).MakeGenericType(entity, key), typeof(Result)));
     }
 
     [Fact]
@@ -63,8 +63,9 @@ public class CatalogExtensionsTests
             typeof(InsertCatalogCommand<NutrientDefinition, string>), typeof(Result<string>)));
         Assert.DoesNotContain(services, sd => sd.ServiceType == Handler(
             typeof(UpdateCatalogCommand<NutrientDefinition>), typeof(Result)));
-        Assert.DoesNotContain(services, sd => sd.ServiceType == Handler(
-            typeof(DeleteCatalogCommand<NutrientDefinition, string>), typeof(bool)));
+        // Ingen tilsvarende sjekk for DeleteCatalogCommand<NutrientDefinition, string>: den generiske typen krever nå
+        // IHasUsageMetadata, som NutrientDefinition ikke implementerer - umulig å konstruere i det hele tatt, så
+        // AddCatalogHandlers kan strukturelt aldri registrere en slik handler.
     }
 
     // Næringsgrupper er nøstet i næringsstoffet og har ingen egne handlers/endepunkter.

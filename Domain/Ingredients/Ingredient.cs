@@ -37,4 +37,15 @@ public class Ingredient : IHasId<Guid>
     // Brukes til optimistisk samtidighetskontroll: IngredientRequest.UpdatedAt sendes tilbake på PUT og sammenlignes mot
     // denne før skriving.
     public required DateTimeOffset UpdatedAt { get; set; }
+
+    // Satt av serveren ved opprettelse, endres aldri (updated_at har ikke egen p_created_at-parameter i update_ingredient).
+    public required DateTimeOffset CreatedAt { get; set; }
+
+    // Satt av admin når allergen-tilordningen er verifisert komplett/korrekt - uavhengig av IsVerified/IsOfficial,
+    // og fritt redigerbar selv om ingrediensen er offisiell (se IngredientMapper.ValidateOfficialLock).
+    public required bool AllergensReviewed { get; set; }
+
+    // Beregnet ved lesing (recipe_ingredient + varianter + løste ubekreftede ingredienser), aldri lagret eller skrevet -
+    // ToIngredient setter alltid 0, faktisk verdi kommer kun fra get_ingredient_by_id.
+    public int UsageCount { get; set; }
 }

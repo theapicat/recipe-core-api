@@ -29,6 +29,9 @@ public class SearchIngredientsQueryHandlerTests
         EnergyKcal = 1,
         IsVerified = true,
         IsOfficial = false,
+        CreatedAt = DateTimeOffset.UtcNow,
+        AllergensReviewed = false,
+        UsageCount = 0,
         AllergenIds = allergens,
         SearchKeywordIds = keywords
     };

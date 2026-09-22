@@ -8,8 +8,11 @@
 -- =========================================================================
 
 CREATE TABLE IF NOT EXISTS unit_type (
-    id   uuid PRIMARY KEY,
-    name text NOT NULL CHECK (name = lower(name))
+    id        uuid PRIMARY KEY,
+    name      text NOT NULL CHECK (name = lower(name)),
+    -- true for seed-rader (Matvaretabellens enhetstyper) - admin kan ikke slette dem. Aldri satt via API-et,
+    -- kun av seed-data (se Dapper-triksen i insert/update_unit_type - @IsSystem finnes ikke som SQL-parameter).
+    is_system boolean NOT NULL DEFAULT false
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_unit_type_name ON unit_type (name);
@@ -23,6 +26,8 @@ CREATE TABLE IF NOT EXISTS unit (
     -- Forholdstall til enhetstypens basisenhet (f.eks. gram for Vekt) - universelt, ikke ingrediensavhengig.
     -- Mange desimaler fordi mikrogram er 0,000001 g.
     base_unit_ratio numeric(20,10) NOT NULL CHECK (base_unit_ratio > 0),
+    -- true for seed-rader - se unit_type.is_system.
+    is_system       boolean NOT NULL DEFAULT false,
     -- Sikkerhetsnett i tillegg til applikasjonsvalideringen (CatalogValidation) - fanger opp enhver skrivevei.
     CHECK (abbreviation <> '')
 );
@@ -38,22 +43,26 @@ CREATE INDEX IF NOT EXISTS ix_unit_unit_type_id ON unit (unit_type_id);
 -- =========================================================================
 
 CREATE TABLE IF NOT EXISTS ingredient_category (
-    id   uuid PRIMARY KEY,
-    name text NOT NULL CHECK (name = lower(name))
+    id        uuid PRIMARY KEY,
+    name      text NOT NULL CHECK (name = lower(name)),
+    -- true for seed-rader - se unit_type.is_system.
+    is_system boolean NOT NULL DEFAULT false
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_ingredient_category_name ON ingredient_category (name);
 
 CREATE TABLE IF NOT EXISTS allergen (
-    id   uuid PRIMARY KEY,
-    name text NOT NULL CHECK (name = lower(name))
+    id        uuid PRIMARY KEY,
+    name      text NOT NULL CHECK (name = lower(name)),
+    is_system boolean NOT NULL DEFAULT false
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_allergen_name ON allergen (name);
 
 CREATE TABLE IF NOT EXISTS search_keyword (
-    id   uuid PRIMARY KEY,
-    name text NOT NULL CHECK (name = lower(name))
+    id        uuid PRIMARY KEY,
+    name      text NOT NULL CHECK (name = lower(name)),
+    is_system boolean NOT NULL DEFAULT false
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_search_keyword_name ON search_keyword (name);
@@ -120,7 +129,11 @@ CREATE TABLE IF NOT EXISTS ingredient (
     -- kilde-id/-url, næringsverdi-settet) mot endring - se IngredientMapper.ValidateOfficialLock.
     is_official             boolean NOT NULL DEFAULT false,
     -- Brukes til optimistisk samtidighetskontroll på PUT (klienten sender tilbake verdien fra sin siste GET).
-    updated_at              timestamptz NOT NULL DEFAULT now()
+    updated_at              timestamptz NOT NULL DEFAULT now(),
+    created_at              timestamptz NOT NULL DEFAULT now(),
+    -- Satt av admin når allergen-tilordningen (ingredient_allergen) er verifisert å være komplett og korrekt for
+    -- ingrediensen - uavhengig av is_verified/is_official, og fritt redigerbar selv om ingrediensen er offisiell.
+    allergens_reviewed      boolean NOT NULL DEFAULT false
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_ingredient_name ON ingredient (name);
@@ -196,8 +209,9 @@ CREATE INDEX IF NOT EXISTS ix_unconfirmed_ingredient_pending ON unconfirmed_ingr
 -- =========================================================================
 
 CREATE TABLE IF NOT EXISTS recipe_category (
-    id   uuid PRIMARY KEY,
-    name text NOT NULL CHECK (name = lower(name))
+    id        uuid PRIMARY KEY,
+    name      text NOT NULL CHECK (name = lower(name)),
+    is_system boolean NOT NULL DEFAULT false
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_recipe_category_name ON recipe_category (name);

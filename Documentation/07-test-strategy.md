@@ -14,7 +14,7 @@ skal alltid matche mappebanen).
 dotnet test Tests/Tests.csproj
 ```
 
-264 tester, alle grønne (kjørt 2026-09-22), ingen ekstern avhengighet (ingen Postgres/RabbitMQ trengs for å kjøre dem).
+273 tester, alle grønne (kjørt 2026-09-22), ingen ekstern avhengighet (ingen Postgres/RabbitMQ trengs for å kjøre dem).
 
 ### Verktøyvalg
 
@@ -32,7 +32,7 @@ dotnet test Tests/Tests.csproj
 | --- | --- | --- |
 | `Persistence/Services/DbReader<T>`/`DbWriter<T>` | `Tests/Persistence/Services/` | Kaster riktig exception-type når en query/command ikke er konfigurert — ingen databaseforbindelse trengs siden feilen kastes før tilkobling åpnes. |
 | `Application/Caching/Services/MemoryCacheService` | `Tests/Application/Caching/` | Get/Set/Remove-primitivene med en ekte `IMemoryCache` (ingen mocking nødvendig). |
-| Generiske katalog-handlers (`GetAll`/`GetById`/`Insert`/`Update`/`Delete`) | `Tests/Application/MediatR/Catalog/` | Cache-treff kaller aldri `DbReader<T>`; cache-miss henter fra reader og fyller cachen; skriveoperasjoner ugyldiggjør cachen; `Delete` returnerer `bool` basert på antall berørte rader. |
+| Generiske katalog-handlers (`GetAll`/`GetById`/`Insert`/`Update`/`Delete`) | `Tests/Application/MediatR/Catalog/` | Cache-treff kaller aldri `DbReader<T>`; cache-miss henter fra reader og fyller cachen; skriveoperasjoner ugyldiggjør cachen; `Insert` nullstiller `IsSystem`/`UsageCount` uansett hva klienten sendte; `Delete` (nå `Result`, ikke `bool`) gir `404` for ukjent id, `409` for en systemrad eller en rad i bruk (med antallet i meldingen), ellers sletter og ugyldiggjør cachen. |
 | Katalogvalidering | `Tests/Application/MediatR/Catalog/CatalogValidationTests` | Blank navn (alle katalogtyper); enhet: blank forkortelse, forholdstall ≤ 0, ukjent enhetstype, «antall» med forholdstall ≠ 1. |
 | `CatalogExtensions.AddCatalogHandlers()` | `Tests/Application/Extensions/` | Regresjonstest for et reelt problem oppdaget under utvikling — at alle fem handler-typer faktisk blir registrert for hver av de seks skrivbare katalogtypene, og at næringsstoffene kun får lesehandlerne (næringsgrupper har ingen egne handlers) (se [`03-cqrs-and-mediatr.md`](03-cqrs-and-mediatr.md) for hvorfor dette ikke skjer automatisk). |
 | `MassTransitEventPublisher` | `Tests/Application/Messaging/` | Delegerer korrekt til `IPublishEndpoint.Publish`. |
@@ -41,7 +41,7 @@ dotnet test Tests/Tests.csproj
 | `JwtAuthenticationExtensions` | `Tests/API/Extensions/` | Kaster `InvalidOperationException` når `Jwt:Key`/`Issuer`/`Audience` mangler; lykkes når alt er satt. |
 | Server-tildelte id-er (`InsertCatalogCommandHandler`) | `Tests/Application/MediatR/Catalog/` | Guid-nøkler får en ny UUIDv7 (klientens id ignoreres); tekstnøkler beholdes. |
 | Navnenormalisering | `Tests/Application/Naming/`, `Tests/Application/MediatR/Catalog/`, `…/User/…` | `NameNormalizer` (trim, mellomrom, små bokstaver, æøå; `Tidy` beholder store/små bokstaver for enhetsforkortelser); Insert/Update-handlerne lagrer navn og enhetsforkortelse med små bokstaver; ubekreftet ingrediens avvises (`409`) når en offisiell ingrediens har samme navn. Controlleren avviser tomt navn med `400`. |
-| Ingrediens: mapping og validering | `Tests/Application/MediatR/Admin/Ingredients/` | `IngredientMapper` tildeler id til ingrediensen og alle barn og dedupliserer koblinger; validering av tomt navn/negative verdier/desimalgrenser (`numeric`-overflow)/duplikat næringsstoff/ugyldig kilde-URL/verifisert uten næring; `ValidateOfficialLock` (kildedata låst på offisielle ingredienser, unntatt tillatte felt og navn med bare endret store/små bokstaver); `IngredientForeignKeyValidator` (ukjent kategori/enhetstype/enhet/allergen/søkeord/næringsstoff, feil enhetstype på standardenhet, dupliserte porsjonsenheter, variant-selvreferanse/-løkke); create/update/delete-handlere (404, `409` samtidighet, cache-invalidering). |
+| Ingrediens: mapping og validering | `Tests/Application/MediatR/Admin/Ingredients/` | `IngredientMapper` tildeler id til ingrediensen og alle barn og dedupliserer koblinger; validering av tomt navn/negative verdier/desimalgrenser (`numeric`-overflow)/duplikat næringsstoff/ugyldig kilde-URL/verifisert uten næring; `ValidateOfficialLock` (kildedata låst på offisielle ingredienser, unntatt tillatte felt, navn med bare endret store/små bokstaver, og `allergensReviewed` — fritt redigerbar selv om offisiell); `IngredientForeignKeyValidator` (ukjent kategori/enhetstype/enhet/allergen/søkeord/næringsstoff, feil enhetstype på standardenhet, dupliserte porsjonsenheter, variant-selvreferanse/-løkke); create/update/delete-handlere (404, `409` samtidighet/i-bruk, `createdAt` satt ved opprettelse og videreført uendret ved oppdatering, cache-invalidering). |
 | Ingrediens: søk | `Tests/Application/MediatR/Ingredients/` | Filtrering i minnet: navn (også søkeord), kategori, allergen inkluder/ekskluder, søkeord, kombinasjon med OG. |
 | Ubekreftede ingredienser | `Tests/Application/MediatR/User/…` og `…/Admin/UnconfirmedIngredients/` | Grenser (totalt/ventende), tilstandsmaskinen (kun `Pending` kan avgjøres, kun `NotRequested` kan endres), en annen brukers rad gir samme `NotFound` som en manglende, approve/merge/reject. |
 | Eier fra token | `Tests/API/Controllers/UnconfirmedIngredientControllerTests`, `Tests/API/Extensions/ClaimsPrincipalExtensionsTests` | Bruker-id leses fra `NameIdentifier` og sendes inn i kommandoen; aldri fra body. |
@@ -67,6 +67,12 @@ pakken tester derfor kun klassenes funksjonalitet, og skal ikke utvides med ende
   Testcontainers-basert prosjekt som kjører migreringsskriptene mot en ekte Postgres-instans i CI.
 - **Ingrediens- og enhetsvalidering (B1-B6)** er i tillegg kjørt ende-til-ende mot det ekte API-et og en migrert scratch-database (2026-09-22, 22 kontroller, opprydding etterpå):
   offisiell-lås, samtidighetskontroll, verifisert-krever-næring, alle fremmednøkkel-meldingene, variantkjede-løkke, enhetsvalidering.
+- **`isSystem`/`usageCount`/`createdAt`/`allergensReviewed`** er kjørt ende-til-ende mot det ekte API-et og en fersk scratch-database
+  (2026-09-22, opprydding etterpå): seed-rader har `isSystem: true`/`usageCount` beregnet riktig (kategori og enhet mot faktiske
+  seed-ingredienser); sletting av en systemrad → `409`, av en ukjent id → `404`; insert-forsøk på å sette `isSystem`/`usageCount` fra
+  klienten blir ignorert i både lagret rad og `201`-svaret; en opprettet variant løfter basisingrediensens `usageCount` til 1 og
+  blokkerer sletting, fjerning av varianten senker den tilbake til 0; `allergensReviewed` kan endres på en offisiell ingrediens uten
+  at `ValidateOfficialLock` slår ut, mens `createdAt` er uendret og `updatedAt` oppdatert etterpå.
 - **Oppskrifter og næring** er i tillegg kjørt ende-til-ende mot det ekte API-et og en migrert dev-database (2026-09-20, 37 + 1 kontroller, opprydding etterpå): opprett/hent/
   endre/favoritt/slett, eierskap (annen bruker → `404`), validering, ubekreftet ingrediens, og næringsberegningen sammenlignet med utregning for hånd (porsjonsvekt, uspiselig del for vektenheter,
   volumskalering, `ToTaste`/`Unconfirmed`/`NoConversion`) — ikke en permanent test.
