@@ -373,6 +373,16 @@ AS $$
     ) SELECT count(*)::integer FROM d;
 $$;
 
+-- Kontosletting (se Application/Messaging/Consumers): sletter ALLE ubekreftede ingredienser til brukeren, uansett
+-- status. Må kjøres etter delete_recipes_by_owner i samme transaksjon - recipe_ingredient.unconfirmed_ingredient_id
+-- har ON DELETE RESTRICT, så en gjenværende oppskriftslinje ville blokkert dette.
+CREATE OR REPLACE FUNCTION delete_unconfirmed_ingredients_by_user(p_user_id uuid)
+RETURNS integer
+LANGUAGE sql
+AS $$
+    WITH d AS (DELETE FROM unconfirmed_ingredient WHERE created_by_user_id = p_user_id RETURNING 1) SELECT count(*)::integer FROM d;
+$$;
+
 -- Admin avslår en ventende forespørsel. Pending -> Rejected.
 CREATE OR REPLACE FUNCTION reject_unconfirmed_ingredient(p_id uuid, p_reason text, p_reviewed_at timestamptz)
 RETURNS integer
@@ -505,6 +515,15 @@ LANGUAGE sql
 AS $$
     WITH d AS (DELETE FROM recipe WHERE id = p_id AND owner_user_id = p_owner_user_id RETURNING 1)
     SELECT count(*)::integer FROM d;
+$$;
+
+-- Kontosletting (se Application/Messaging/Consumers): sletter ALLE oppskriftene til brukeren (steg/ingredienslinjer
+-- følger med via ON DELETE CASCADE). Må kjøres FØR delete_unconfirmed_ingredients_by_user i samme transaksjon.
+CREATE OR REPLACE FUNCTION delete_recipes_by_owner(p_owner_user_id uuid)
+RETURNS integer
+LANGUAGE sql
+AS $$
+    WITH d AS (DELETE FROM recipe WHERE owner_user_id = p_owner_user_id RETURNING 1) SELECT count(*)::integer FROM d;
 $$;
 
 CREATE OR REPLACE FUNCTION insert_recipe_step(

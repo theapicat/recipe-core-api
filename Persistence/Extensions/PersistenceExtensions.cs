@@ -49,6 +49,8 @@ public static class PersistenceExtensions
         services.AddScoped<IUnconfirmedIngredientReader, UnconfirmedIngredientReader>();
         services.AddScoped<IUnconfirmedIngredientWriter, UnconfirmedIngredientWriter>();
 
+        services.AddScoped<IUserDataEraser, UserDataEraser>();
+
         return services;
     }
 }

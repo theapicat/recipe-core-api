@@ -17,7 +17,7 @@ unconfirmed-ingredient requests) and JWT auth are built end-to-end; recipes (CRU
 dotnet build                          # build the whole solution
 dotnet run --project API              # run the API (http://localhost:5002, see API/Properties/launchSettings.json)
 dotnet watch --project API run        # run with hot reload
-dotnet test Tests/Tests.csproj        # run unit tests (273 tests, no external dependencies needed)
+dotnet test Tests/Tests.csproj        # run unit tests (278 tests, no external dependencies needed)
 ```
 
 Local dependencies (Postgres, RabbitMQ, Seq) are expected to run externally (e.g. via the platform's
@@ -117,7 +117,11 @@ the app throws at startup if any is missing.
 - .NET 10, ASP.NET Core Web API, C# nullable-enabled.
 - MediatR for CQRS command/query dispatch.
 - MassTransit + RabbitMQ for async cross-service messaging (connection config under `RabbitMQ:*` in
-  appsettings, defaulted in `Application/Extensions/MassTransitExtensions.cs`).
+  appsettings, defaulted in `Application/Extensions/MassTransitExtensions.cs`). **Every `AddConsumer<T>()` must set
+  an explicit `Endpoint(e => e.Name = "CoreApi-...")`** — MassTransit's default queue name is just the consumer's
+  class name with no namespace, so a same-named consumer in a sibling service (confirmed live with
+  `recipe-notification-service`) silently becomes a competing consumer on the same queue instead of getting its own.
+  See `Documentation/04-events-and-messaging.md`.
 - Microsoft.AspNetCore.Authentication.JwtBearer for auth (`API/Extensions/JwtAuthenticationExtensions.cs`) —
   Core API validates the JWT itself, doesn't just trust the gateway.
 - Dapper + Npgsql for data access, `dbup-postgresql` for migrations (numbered scripts in

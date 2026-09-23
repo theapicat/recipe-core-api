@@ -14,7 +14,7 @@ skal alltid matche mappebanen).
 dotnet test Tests/Tests.csproj
 ```
 
-273 tester, alle grønne (kjørt 2026-09-22), ingen ekstern avhengighet (ingen Postgres/RabbitMQ trengs for å kjøre dem).
+278 tester, alle grønne (kjørt 2026-09-23), ingen ekstern avhengighet (ingen Postgres/RabbitMQ trengs for å kjøre dem).
 
 ### Verktøyvalg
 
@@ -37,6 +37,7 @@ dotnet test Tests/Tests.csproj
 | `CatalogExtensions.AddCatalogHandlers()` | `Tests/Application/Extensions/` | Regresjonstest for et reelt problem oppdaget under utvikling — at alle fem handler-typer faktisk blir registrert for hver av de seks skrivbare katalogtypene, og at næringsstoffene kun får lesehandlerne (næringsgrupper har ingen egne handlers) (se [`03-cqrs-and-mediatr.md`](03-cqrs-and-mediatr.md) for hvorfor dette ikke skjer automatisk). |
 | `MassTransitEventPublisher` | `Tests/Application/Messaging/` | Delegerer korrekt til `IPublishEndpoint.Publish`. |
 | `SendContactFormCommandHandler` | `Tests/Application/MediatR/Public/ContactForm/` | Bygger og publiserer riktig hendelse, returnerer `true`. |
+| Kontosletting: forbrukere + handler | `Tests/Application/Messaging/Consumers/`, `Tests/Application/MediatR/Users/` | Hver av de fire `IConsumer<T>` sender `DeleteAllUserDataCommand` videre med riktig `UserId` fra hendelsen; `DeleteAllUserDataCommandHandler` kaller `IUserDataEraser` med riktig id. |
 | `ReadCatalogController<T>`/`ReadWriteCatalogController<T>` | `Tests/API/Controllers/` | Riktig HTTP-resultat (`Ok`/`NotFound`/`Created` med server-tildelt id/`BadRequest` uten id på PUT eller med tomt navn/`NoContent`) basert på hva mediator returnerer, også for tekstnøkler (testet med en lokal testentitet). |
 | `JwtAuthenticationExtensions` | `Tests/API/Extensions/` | Kaster `InvalidOperationException` når `Jwt:Key`/`Issuer`/`Audience` mangler; lykkes når alt er satt. |
 | Server-tildelte id-er (`InsertCatalogCommandHandler`) | `Tests/Application/MediatR/Catalog/` | Guid-nøkler får en ny UUIDv7 (klientens id ignoreres); tekstnøkler beholdes. |
@@ -73,6 +74,15 @@ pakken tester derfor kun klassenes funksjonalitet, og skal ikke utvides med ende
   klienten blir ignorert i både lagret rad og `201`-svaret; en opprettet variant løfter basisingrediensens `usageCount` til 1 og
   blokkerer sletting, fjerning av varianten senker den tilbake til 0; `allergensReviewed` kan endres på en offisiell ingrediens uten
   at `ValidateOfficialLock` slår ut, mens `createdAt` er uendret og `updatedAt` oppdatert etterpå.
+- **Kontosletting-forbrukerne** er kjørt ende-til-ende mot det **ekte delte dev-RabbitMQ-oppsettet** (2026-09-23, ikke en
+  engangs-broker - dette er innkommende tjeneste-til-tjeneste-kobling, må testes mot samme infrastruktur som
+  `recipe-notification-service` faktisk bruker): en instans uten eksplisitt `Endpoint`-navn viste seg som forbruker #2 på
+  `recipe-notification-service` sin ekte `AccountDeletedByUser`-kø (bekreftet via RabbitMQ sitt management-API) - rettet med et
+  eget `CoreApi-`-prefikset kønavn per forbruker, verifisert på nytt (hver kø 1 forbruker igjen). Deretter publisert en ekte
+  MassTransit-innpakket testmelding på den delte utvekslingen: begge køene mottok sin egen kopi (fan-out), handleren logget
+  riktig (0 oppskrifter/0 ubekreftede ingredienser for testbrukeren), og ingenting havnet i `recipe-notification-service` sin
+  feilkø. Scratch-Postgres og scratch-API-prosessen ble ryddet opp; de nye `CoreApi-*`-køene ble stående (tomme, ufarlige -
+  det er de faktiske produksjonskønavnene nå som koden finnes, ikke testrester).
 - **Oppskrifter og næring** er i tillegg kjørt ende-til-ende mot det ekte API-et og en migrert dev-database (2026-09-20, 37 + 1 kontroller, opprydding etterpå): opprett/hent/
   endre/favoritt/slett, eierskap (annen bruker → `404`), validering, ubekreftet ingrediens, og næringsberegningen sammenlignet med utregning for hånd (porsjonsvekt, uspiselig del for vektenheter,
   volumskalering, `ToTaste`/`Unconfirmed`/`NoConversion`) — ikke en permanent test.
